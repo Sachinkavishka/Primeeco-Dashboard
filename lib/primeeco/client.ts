@@ -28,19 +28,22 @@ async function requestToken(): Promise<CachedToken> {
     }
   }
 
+  // PrimeEco's /oauth/token expects form-encoded params (not JSON).
+  const form = new URLSearchParams({
+    grant_type: "password",
+    username: primeecoConfig.username,
+    password: primeecoConfig.password,
+    client_id: primeecoConfig.clientId,
+    client_secret: primeecoConfig.clientSecret,
+  })
+
   const res = await fetch(`${primeecoConfig.apiUrl}/oauth/token`, {
     method: "POST",
     headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: primeecoConfig.acceptHeader,
     },
-    body: JSON.stringify({
-      grant_type: "password",
-      username: primeecoConfig.username,
-      password: primeecoConfig.password,
-      client_id: primeecoConfig.clientId,
-      client_secret: primeecoConfig.clientSecret,
-    }),
+    body: form,
     cache: "no-store",
   })
 
