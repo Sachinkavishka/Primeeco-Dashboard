@@ -24,6 +24,7 @@ export interface RawJob {
   assignedId?: string | null
   supervisorId?: string | null
   clientId?: string | null
+  divisionId?: string | null
 
   // Region is sometimes an inline string, sometimes just an id.
   region?: string | null
@@ -88,6 +89,7 @@ export interface DashboardJob {
   caseManager: string | null
   assignedTo: string | null
   region: string | null
+  division: string | null
   /** Primary money figure used across the dashboard (authorised total, ex-tax). */
   value: number
   excessCollected: number

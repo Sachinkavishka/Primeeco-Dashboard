@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 const tabs = [
   { href: "/dashboard", label: "Operations" },
   { href: "/finance", label: "Financial" },
+  { href: "/estimates", label: "Estimates" },
 ]
 
 /** Tab switcher between the Operations and Financial dashboards (sits in the

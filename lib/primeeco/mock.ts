@@ -33,6 +33,7 @@ const REGIONS = [
   "Interstate - Tasmania",
 ]
 const CLIENTS = ["AAMI Insurance", "Suncorp", "Allianz", "IAG", "QBE", "Strata Plus"]
+const DIVISIONS = ["Detail Facility Management - VIC", "Mould Squad", "SOLU TAS", "Detail Facility Management - QLD"]
 
 /** Small seeded PRNG so the mock is stable across renders (mulberry32). */
 function makeRng(seed: number) {
@@ -69,6 +70,7 @@ export function getMockJobs(count = 128): DashboardJob[] {
       caseManager: pick(rng, CASE_MANAGERS),
       assignedTo: pick(rng, ASSIGNEES),
       region: pick(rng, REGIONS),
+      division: pick(rng, DIVISIONS),
       value,
       excessCollected: rng() > 0.6 ? Math.round(rng() * 1500) : 0,
       incidentDate: new Date(now - (ageDays + 2) * 86_400_000).toISOString(),

@@ -70,6 +70,7 @@ export function normalizeJob(raw: RawJob, lookups: Lookups): DashboardJob {
     caseManager: resolve(f.caseManagerId, lookups.userName),
     assignedTo: resolve(f.assignedId, lookups.userName),
     region: toStr(f.region),
+    division: resolve(f.divisionId, lookups.divisionName),
     // Primary job value: authorised total ex-tax (falls back through variants).
     value: toNumber(
       f.authorisedTotalExcludingTax ??

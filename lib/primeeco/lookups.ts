@@ -19,6 +19,8 @@ export interface Lookups {
   userName: Map<string, string>
   /** contactId -> name (used for client names) */
   contactName: Map<string, string>
+  /** divisionId -> division name */
+  divisionName: Map<string, string>
 }
 
 interface ListEnvelope {
@@ -55,10 +57,11 @@ function str(v: unknown): string | undefined {
 }
 
 async function build(): Promise<Lookups> {
-  const [statuses, users, contacts] = await Promise.all([
+  const [statuses, users, contacts, divisions] = await Promise.all([
     fetchAll("/statuses"),
     fetchAll("/users"),
     fetchAll("/contacts"),
+    fetchAll("/divisions"),
   ])
 
   const statusName = new Map<string, string>()
@@ -88,7 +91,14 @@ async function build(): Promise<Lookups> {
     if (name) contactName.set(c.id, name)
   }
 
-  return { statusName, statusType, userName, contactName }
+  const divisionName = new Map<string, string>()
+  for (const dv of divisions ?? []) {
+    if (!dv.id) continue
+    const nm = str((dv.attributes ?? {}).name)
+    if (nm) divisionName.set(dv.id, nm)
+  }
+
+  return { statusName, statusType, userName, contactName, divisionName }
 }
 
 export async function getLookups(): Promise<Lookups> {
