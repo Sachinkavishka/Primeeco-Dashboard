@@ -1,0 +1,5 @@
+# Single-package repo. This file exists only to carry pnpm settings.
+# Approve native build scripts so `pnpm install` exits 0 (required by Vercel's install step).
+allowBuilds:
+  sharp: true
+  unrs-resolver: true
