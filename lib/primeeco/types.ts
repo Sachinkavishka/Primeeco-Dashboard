@@ -7,47 +7,41 @@
  * against a real payload without touching any UI code.
  */
 
-/** A PrimeEco job as returned by GET /jobs (attributes may be flat or JSON:API-wrapped). */
+/**
+ * A PrimeEco job. GET /jobs returns JSON:API resources: `{ type, id, attributes }`.
+ * The attributes reference related entities by UUID (statusId, estimatorId, ...),
+ * which normalize.ts resolves to names via the lookups. `[key: string]: unknown`
+ * keeps this tolerant of the many fields we don't consume.
+ */
 export interface RawJob {
-  jobId?: string | number
   id?: string | number
   jobNumber?: string
-  jobStatus?: string
-  jobStatusId?: string | number
 
-  incidentDate?: string | null
-  allocatedDate?: string | null
-  initialStartDate?: string | null
-  initialEndDate?: string | null
+  // UUID references — resolved to names in normalize.ts via Lookups.
+  statusId?: string | null
+  estimatorId?: string | null
+  caseManagerId?: string | null
+  assignedId?: string | null
+  supervisorId?: string | null
+  clientId?: string | null
 
-  regionId?: string | number | null
-  brokerReference?: string | null
-  strataReference?: string | null
-  adjusterReference?: string | null
+  // Region is sometimes an inline string, sometimes just an id.
+  region?: string | null
+  regionId?: string | null
 
-  // Financials — the documented authorised total plus other commonly-present fields.
+  // Financials (strings like "700.80"). authorisedTotalExcludingTax is the
+  // primary "job value" figure used across the dashboard.
+  authorisedTotalIncludingTax?: number | string | null
+  authorisedTotalExcludingTax?: number | string | null
   authorisedTotalExcludingTaxExcludingMarginExcludingMarkup?: number | string | null
-  authorisedTotal?: number | string | null
-  estimateTotal?: number | string | null
   excessCollected?: number | string | null
 
-  // People — best-effort field names; resolved defensively in normalize.ts.
-  estimator?: NamedRef | string | null
-  estimatorName?: string | null
-  caseManager?: NamedRef | string | null
-  caseManagerName?: string | null
-  assignedTo?: NamedRef | string | null
-  assignedToName?: string | null
-
-  client?: NamedRef | string | null
-  clientName?: string | null
-
+  incidentDate?: string | null
   createdAt?: string | null
   updatedAt?: string | null
 
-  // JSON:API escape hatches.
+  // JSON:API wrapper — attributes are merged in normalize.ts.
   attributes?: Record<string, unknown>
-  relationships?: Record<string, unknown>
 
   [key: string]: unknown
 }
@@ -87,6 +81,8 @@ export interface DashboardJob {
   jobNumber: string
   status: string
   statusId: string | null
+  /** "Open" | "Closed" from the status lookup — drives the active/completed split. */
+  statusType: string | null
   client: string | null
   estimator: string | null
   caseManager: string | null

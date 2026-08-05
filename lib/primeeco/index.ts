@@ -1,7 +1,9 @@
 import "server-only"
 import { aggregateDashboard } from "./aggregate"
 import { isPrimeecoConfigured } from "./config"
-import { fetchAllJobs } from "./jobs"
+import { fetchAllRawJobs } from "./jobs"
+import { getLookups } from "./lookups"
+import { normalizeJob } from "./normalize"
 import { getMockJobs } from "./mock"
 import type { DashboardData } from "./types"
 
@@ -20,7 +22,10 @@ export async function getDashboardData(): Promise<DashboardData> {
   }
 
   try {
-    const jobs = await fetchAllJobs()
+    // Jobs and lookups fetch in parallel; lookups are cached so the 60s refresh
+    // reuses them. Then resolve each job's UUID references to names.
+    const [rawJobs, lookups] = await Promise.all([fetchAllRawJobs(), getLookups()])
+    const jobs = rawJobs.map((raw) => normalizeJob(raw, lookups))
     return aggregateDashboard(jobs, { live: true })
   } catch (err) {
     const message = err instanceof Error ? err.message : "Unknown error contacting PrimeEco"

@@ -12,11 +12,16 @@ import type {
  * ever needed) the client.
  */
 
-/** Statuses (lower-cased) that count as "completed/closed" for KPI purposes. */
+/** Status-name keywords used only as a fallback when statusType is absent. */
 const COMPLETED_STATUS_HINTS = ["complete", "closed", "finalised", "finalized", "cancelled", "canceled"]
 
-function isCompleted(status: string): boolean {
-  const s = status.toLowerCase()
+/**
+ * A job is "completed" when its status lookup says statusType === "Closed".
+ * Falls back to name keywords if the type is missing (e.g. mock/legacy data).
+ */
+function isCompleted(job: DashboardJob): boolean {
+  if (job.statusType) return job.statusType.toLowerCase() === "closed"
+  const s = job.status.toLowerCase()
   return COMPLETED_STATUS_HINTS.some((hint) => s.includes(hint))
 }
 
@@ -57,7 +62,7 @@ const AGING_BUCKETS: { label: string; min: number; max: number }[] = [
 ]
 
 function buildAging(jobs: DashboardJob[]): AgingBucket[] {
-  const active = jobs.filter((j) => !isCompleted(j.status))
+  const active = jobs.filter((j) => !isCompleted(j))
   return AGING_BUCKETS.map(({ label, min, max }) => ({
     label,
     count: active.filter((j) => j.ageDays !== null && j.ageDays >= min && j.ageDays <= max).length,
@@ -68,8 +73,8 @@ export function aggregateDashboard(
   jobs: DashboardJob[],
   meta: { live: boolean; error?: string } = { live: false },
 ): DashboardData {
-  const active = jobs.filter((j) => !isCompleted(j.status))
-  const completed = jobs.filter((j) => isCompleted(j.status))
+  const active = jobs.filter((j) => !isCompleted(j))
+  const completed = jobs.filter((j) => isCompleted(j))
 
   const now = Date.now()
   const THIRTY_DAYS = 30 * 86_400_000

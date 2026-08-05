@@ -44,6 +44,7 @@ export function getMockJobs(count = 128): DashboardJob[] {
 
   return Array.from({ length: count }, (_, i) => {
     const status = pick(rng, STATUSES)
+    const closedStatuses = ["Closed", "Cancelled"]
     const ageDays = Math.floor(rng() * 120)
     const createdAt = new Date(now - ageDays * 86_400_000).toISOString()
     const value = Math.round((2000 + rng() * 48000) / 50) * 50
@@ -53,6 +54,7 @@ export function getMockJobs(count = 128): DashboardJob[] {
       jobNumber: `JOB-${100000 + i}`,
       status,
       statusId: String(STATUSES.indexOf(status) + 1),
+      statusType: closedStatuses.includes(status) ? "Closed" : "Open",
       client: pick(rng, CLIENTS),
       estimator: pick(rng, ESTIMATORS),
       caseManager: pick(rng, CASE_MANAGERS),
