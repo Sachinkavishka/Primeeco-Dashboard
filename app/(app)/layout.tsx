@@ -7,7 +7,7 @@ export default function AppLayout({
   children: React.ReactNode
 }) {
   return (
-    <div className="h-screen overflow-y-auto bg-slate-950">
+    <div className="h-screen overflow-y-auto bg-slate-100">
       {children}
     </div>
   )

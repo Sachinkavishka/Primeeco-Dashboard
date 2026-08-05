@@ -135,7 +135,19 @@ export interface DashboardData {
   byAssignee: PersonaBreakdownItem[]
   byRegion: PersonaBreakdownItem[]
   aging: AgingBucket[]
-  recentJobs: DashboardJob[]
+  /** Jobs created per calendar month (last 12), for the trend chart. */
+  trend: TrendPoint[]
+  /** All normalized jobs — powers the client-side drill-down and the table. */
+  jobs: DashboardJob[]
   /** Present when the API could not be reached; dashboard shows a banner. */
   error?: string
+}
+
+export interface TrendPoint {
+  /** ISO year-month, e.g. "2026-08". */
+  month: string
+  /** Short display label, e.g. "Aug". */
+  label: string
+  count: number
+  value: number
 }
