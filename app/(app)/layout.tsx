@@ -1,25 +1,14 @@
-import { redirect } from "next/navigation"
-import { createClient } from "@/lib/supabase/server"
-import { Sidebar } from "@/components/layout/sidebar"
-
-export default async function AppLayout({
+// Login is disabled for the open office wall display (see api/dashboard/route.ts).
+// Full-bleed layout so the dashboard fills the screen edge-to-edge.
+// To re-enable Supabase auth later: restore the getUser() guard + proxy.ts.
+export default function AppLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) {
-    redirect("/auth/login")
-  }
-
   return (
-    <div className="flex h-screen overflow-hidden bg-gray-50">
-      <Sidebar />
-      <main className="flex-1 overflow-y-auto">
-        {children}
-      </main>
+    <div className="h-screen overflow-y-auto bg-slate-950">
+      {children}
     </div>
   )
 }
