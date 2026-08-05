@@ -26,7 +26,9 @@ interface ListEnvelope {
   meta?: { pagination?: { total_pages?: number } }
 }
 
-const TTL_MS = 10 * 60 * 1000 // lookups are stable; refresh every 10 min
+// Lookups (statuses/users/contacts ~1,700 rows) change rarely, and contacts
+// alone is ~17 requests. Cache for 6h to protect the 5,000/day rate limit.
+const TTL_MS = 6 * 60 * 60 * 1000
 const PER_PAGE = 100
 const MAX_PAGES = 30 // safety cap (~3,000 rows) to respect rate limits
 

@@ -26,7 +26,7 @@ import { TrendChart } from "./charts/trend-chart"
 import { catColor, OTHER_COLOR } from "./charts/palette"
 import { DrillDown, type DrillState } from "./drill-down"
 
-const REFRESH_MS = 60_000
+const REFRESH_MS = 120_000 // poll every 2 min; server data cache refreshes every 5 min
 const AGING_COLORS = ["#1baf7a", "#84cc16", "#eda100", "#eb6834", "#e34948"]
 
 export function DashboardView({ initial }: { initial: DashboardData }) {
@@ -116,7 +116,7 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
               <Clock className="h-4 w-4 text-blue-200" />
               {fmtTime(data.generatedAt)}
             </div>
-            <div className="text-xs text-blue-200">auto every 60s</div>
+            <div className="text-xs text-blue-200">auto-refresh</div>
           </div>
         </div>
       </header>
