@@ -23,6 +23,8 @@ import { DonutChart } from "./charts/donut-chart"
 import { BarList } from "./charts/bar-list"
 import { ColumnChart } from "./charts/column-chart"
 import { TrendChart } from "./charts/trend-chart"
+import { ChoroplethMap } from "./charts/choropleth-map"
+import { AUSTRALIA_SHAPES, MELBOURNE_SHAPES, ACT_DOT, regionToState, regionToMetro } from "./charts/region-maps"
 import { catColor, OTHER_COLOR } from "./charts/palette"
 import { DrillDown, type DrillState } from "./drill-down"
 
@@ -93,6 +95,30 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
     const completed = label === "Completed"
     setDrill({ title: label, jobs: data.jobs.filter((j) => isCompleted(j) === completed) })
   }
+
+  // --- region maps (roll region names up to state + Melbourne metro zone) --
+  const stateCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const j of data.jobs) {
+      const s = regionToState(j.region)
+      if (s) m[s] = (m[s] ?? 0) + 1
+    }
+    return m
+  }, [data.jobs])
+
+  const metroCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const j of data.jobs) {
+      const z = regionToMetro(j.region)
+      if (z) m[z] = (m[z] ?? 0) + 1
+    }
+    return m
+  }, [data.jobs])
+
+  const onStateSelect = (code: string) =>
+    setDrill({ title: `State: ${code}`, jobs: data.jobs.filter((j) => regionToState(j.region) === code) })
+  const onMetroSelect = (code: string) =>
+    setDrill({ title: `Melbourne — ${code}`, jobs: data.jobs.filter((j) => regionToMetro(j.region) === code) })
 
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 p-5 lg:p-7">
@@ -173,6 +199,29 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
         </Panel>
         <Panel title="By Region" subtitle="all jobs · click to drill">
           <BarList items={data.byRegion} onSelect={drillByPersona("Region", (j) => j.region)} color="#4a3aa7" />
+        </Panel>
+      </div>
+
+      {/* Region maps */}
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Jobs by State" subtitle="Australia · click a state to drill in">
+          <ChoroplethMap
+            shapes={AUSTRALIA_SHAPES}
+            counts={stateCounts}
+            viewBox="0 0 1000 900"
+            onSelect={onStateSelect}
+            actDot={ACT_DOT}
+            height={340}
+          />
+        </Panel>
+        <Panel title="Greater Melbourne" subtitle="metro zones · click a zone to drill in">
+          <ChoroplethMap
+            shapes={MELBOURNE_SHAPES}
+            counts={metroCounts}
+            viewBox="0 0 300 280"
+            onSelect={onMetroSelect}
+            height={340}
+          />
         </Panel>
       </div>
 

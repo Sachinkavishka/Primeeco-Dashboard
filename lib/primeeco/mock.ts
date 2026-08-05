@@ -22,7 +22,16 @@ const STATUSES = [
 const ESTIMATORS = ["Sarah Nguyen", "James O'Brien", "Priya Patel", "Marco Rossi", "Unassigned"]
 const CASE_MANAGERS = ["Emma Wilson", "David Chen", "Aisha Khan", "Tom Baker"]
 const ASSIGNEES = ["Field Crew A", "Field Crew B", "Field Crew C", "Subcontractor: DryTech"]
-const REGIONS = ["Sydney Metro", "Newcastle", "Wollongong", "Central Coast", "Blue Mountains"]
+const REGIONS = [
+  "Metropolitan Melbourne - Southeastern Suburbs",
+  "Metropolitan Melbourne - Northern Suburbs",
+  "Metropolitan Melbourne - Western Suburbs",
+  "Metropolitan Melbourne - Eastern Suburbs",
+  "Metropolitan Melbourne - Central Suburbs",
+  "Rural Victoria - Eastern Towns",
+  "Interstate - New South Wales",
+  "Interstate - Tasmania",
+]
 const CLIENTS = ["AAMI Insurance", "Suncorp", "Allianz", "IAG", "QBE", "Strata Plus"]
 
 /** Small seeded PRNG so the mock is stable across renders (mulberry32). */
