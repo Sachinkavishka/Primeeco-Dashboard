@@ -99,7 +99,8 @@ export function aggregateDashboard(
       avgJobValue: jobs.length ? totalValue / jobs.length : 0,
       jobsCreated30d,
     },
-    statusBreakdown: buildStatusBreakdown(jobs),
+    // Status breakdown covers OPEN jobs only — closed/finished jobs are excluded.
+    statusBreakdown: buildStatusBreakdown(active),
     byEstimator: groupBy(active, (j) => j.estimator),
     byCaseManager: groupBy(active, (j) => j.caseManager),
     byAssignee: groupBy(active, (j) => j.assignedTo),

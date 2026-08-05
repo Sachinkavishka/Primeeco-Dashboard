@@ -8,7 +8,7 @@ export function StatusBreakdown({ items }: { items: StatusBreakdownItem[] }) {
   const max = Math.max(1, ...items.map((i) => i.count))
 
   return (
-    <Panel title="Jobs by Status" subtitle={`${items.length} statuses`}>
+    <Panel title="Open Jobs by Status" subtitle={`${items.length} statuses`}>
       <div className="space-y-3">
         {items.map((item) => {
           const c = statusColor(item.status)
