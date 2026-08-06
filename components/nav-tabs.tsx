@@ -1,5 +1,6 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 
@@ -14,6 +15,12 @@ const tabs = [
  *  coloured header banner, so styling assumes a dark background). */
 export function NavTabs() {
   const pathname = usePathname()
+  const [kiosk, setKiosk] = useState(false)
+  // Hide the tabs when embedded in a kiosk screen (?kiosk=1) for a clean TV view.
+  useEffect(() => {
+    setKiosk(new URLSearchParams(window.location.search).has("kiosk"))
+  }, [])
+  if (kiosk) return null
   return (
     <nav className="flex gap-1 rounded-xl bg-white/15 p-1 backdrop-blur">
       {tabs.map((t) => {
