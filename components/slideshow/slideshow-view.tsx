@@ -15,11 +15,13 @@ import { ChoroplethMap } from "@/components/dashboard/charts/choropleth-map"
 import { JobsTable } from "@/components/dashboard/jobs-table"
 import { catColor, OTHER_COLOR } from "@/components/dashboard/charts/palette"
 import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro } from "@/components/dashboard/charts/region-maps"
+import { loadSlideshowConfig, SLIDESHOW_KEY, type SlideshowConfig } from "./widgets"
 
 const REFRESH_MS = 120_000
 const AGING_COLORS = ["#1baf7a", "#84cc16", "#eda100", "#eb6834", "#e34948"]
 
 interface Slide {
+  id: string
   title: string
   node: React.ReactNode
 }
@@ -28,13 +30,21 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
   const [data, setData] = useState(initial)
   const [i, setI] = useState(0)
   const [paused, setPaused] = useState(false)
-  const [intervalSec, setIntervalSec] = useState(15)
+  const [config, setConfig] = useState<SlideshowConfig | null>(null)
 
-  // read ?sec= for the rotation interval
+  // load widget selection/order + interval from kiosk config; sync live.
   useEffect(() => {
-    const s = Number(new URLSearchParams(window.location.search).get("sec"))
-    if (s && s >= 3) setIntervalSec(s)
+    setConfig(loadSlideshowConfig())
+    const urlSec = Number(new URLSearchParams(window.location.search).get("sec"))
+    if (urlSec && urlSec >= 3) setConfig((c) => ({ widgets: (c ?? loadSlideshowConfig()).widgets, sec: urlSec }))
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === SLIDESHOW_KEY) setConfig(loadSlideshowConfig())
+    }
+    window.addEventListener("storage", onStorage)
+    return () => window.removeEventListener("storage", onStorage)
   }, [])
+
+  const intervalSec = config?.sec ?? 15
 
   // poll data
   useEffect(() => {
@@ -49,7 +59,13 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
     return () => clearInterval(id)
   }, [])
 
-  const slides = useMemo(() => buildSlides(data), [data])
+  const slides = useMemo(() => {
+    const all = buildSlides(data)
+    if (!config) return all
+    const byId = new Map(all.map((s) => [s.id, s]))
+    const chosen = config.widgets.map((id) => byId.get(id)).filter((s): s is Slide => Boolean(s))
+    return chosen.length ? chosen : all
+  }, [data, config])
 
   // auto-advance
   const advance = useCallback((dir: number) => setI((p) => (p + dir + slides.length) % slides.length), [slides.length])
@@ -183,6 +199,7 @@ function buildSlides(data: DashboardData): Slide[] {
 
   return [
     {
+      id: "kpis",
       title: "Key Metrics",
       node: (
         <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
@@ -197,13 +214,14 @@ function buildSlides(data: DashboardData): Slide[] {
         </div>
       ),
     },
-    { title: "Open Jobs by Status", node: <SlideCard><DonutChart data={statusDonut} centerLabel="open jobs" size={300} /></SlideCard> },
-    { title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={440} /></SlideCard> },
-    { title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={440} /></SlideCard> },
-    { title: "Active Jobs by Estimator", node: <SlideCard><BarList items={data.byEstimator} limit={12} color="#2a78d6" /></SlideCard> },
-    { title: "Active Jobs by Case Manager", node: <SlideCard><BarList items={data.byCaseManager} limit={12} color="#1baf7a" /></SlideCard> },
-    { title: "Active Jobs by Assignee", node: <SlideCard><BarList items={data.byAssignee} limit={12} color="#eb6834" /></SlideCard> },
+    { id: "status", title: "Open Jobs by Status", node: <SlideCard><DonutChart data={statusDonut} centerLabel="open jobs" size={300} /></SlideCard> },
+    { id: "trend", title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={440} /></SlideCard> },
+    { id: "aging", title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={440} /></SlideCard> },
+    { id: "byEstimator", title: "Active Jobs by Estimator", node: <SlideCard><BarList items={data.byEstimator} limit={12} color="#2a78d6" /></SlideCard> },
+    { id: "byCaseManager", title: "Active Jobs by Case Manager", node: <SlideCard><BarList items={data.byCaseManager} limit={12} color="#1baf7a" /></SlideCard> },
+    { id: "byAssignee", title: "Active Jobs by Assignee", node: <SlideCard><BarList items={data.byAssignee} limit={12} color="#eb6834" /></SlideCard> },
     {
+      id: "assigneePies",
       title: "Active Jobs by Assignee — by Status",
       node: (
         <SlideCard>
@@ -223,8 +241,8 @@ function buildSlides(data: DashboardData): Slide[] {
         </SlideCard>
       ),
     },
-    { title: "Jobs by State", node: <SlideCard><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={460} /></SlideCard> },
-    { title: "Greater Melbourne", node: <SlideCard><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={460} /></SlideCard> },
-    { title: "Recent Jobs", node: <JobsTable jobs={data.jobs.slice(0, 14)} /> },
+    { id: "stateMap", title: "Jobs by State", node: <SlideCard><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={460} /></SlideCard> },
+    { id: "melbourneMap", title: "Greater Melbourne", node: <SlideCard><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={460} /></SlideCard> },
+    { id: "recentJobs", title: "Recent Jobs", node: <JobsTable jobs={data.jobs.slice(0, 14)} /> },
   ]
 }

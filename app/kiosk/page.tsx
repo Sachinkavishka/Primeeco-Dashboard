@@ -1,6 +1,12 @@
 "use client"
 
 import { useCallback, useEffect, useRef, useState } from "react"
+import {
+  SLIDESHOW_WIDGETS,
+  SLIDESHOW_KEY,
+  loadSlideshowConfig,
+  type SlideshowConfig,
+} from "@/components/slideshow/widgets"
 
 /**
  * Kiosk display controller for the office wall screens.
@@ -56,14 +62,17 @@ export default function KioskPage() {
   const [config, setConfig] = useState<Config>(DEFAULT)
   const [idx, setIdx] = useState(0)
   const [showSettings, setShowSettings] = useState(false)
+  const [slideConfig, setSlideConfig] = useState<SlideshowConfig | null>(null)
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   // Init from URL + storage, and sync across windows.
   useEffect(() => {
     setScreen(new URLSearchParams(window.location.search).get("screen") || "1")
     setConfig(loadConfig())
+    setSlideConfig(loadSlideshowConfig())
     const onStorage = (e: StorageEvent) => {
       if (e.key === STORAGE_KEY) setConfig(loadConfig())
+      if (e.key === SLIDESHOW_KEY) setSlideConfig(loadSlideshowConfig())
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key.toLowerCase() === "s") setShowSettings((v) => !v)
@@ -126,6 +135,24 @@ export default function KioskPage() {
     const views = existing.includes(view) ? existing.filter((v) => v !== view) : [...existing, view]
     updateScreen(key, { views })
   }
+
+  // --- slideshow widget config -------------------------------------------
+  const sc2: SlideshowConfig = slideConfig ?? { widgets: SLIDESHOW_WIDGETS.map((w) => w.id), sec: 15 }
+  const saveSlide = (next: SlideshowConfig) => {
+    setSlideConfig(next)
+    localStorage.setItem(SLIDESHOW_KEY, JSON.stringify(next))
+  }
+  const labelOf = (id: string) => SLIDESHOW_WIDGETS.find((w) => w.id === id)?.label ?? id
+  const moveWidget = (id: string, dir: number) => {
+    const arr = [...sc2.widgets]
+    const idx = arr.indexOf(id)
+    const j = idx + dir
+    if (idx < 0 || j < 0 || j >= arr.length) return
+    ;[arr[idx], arr[j]] = [arr[j], arr[idx]]
+    saveSlide({ ...sc2, widgets: arr })
+  }
+  const removeWidget = (id: string) => saveSlide({ ...sc2, widgets: sc2.widgets.filter((w) => w !== id) })
+  const addWidget = (id: string) => saveSlide({ ...sc2, widgets: [...sc2.widgets, id] })
 
   return (
     <div className="fixed inset-0 bg-black">
@@ -195,8 +222,53 @@ export default function KioskPage() {
               })}
             </div>
 
+            {/* Slideshow widgets & order */}
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <div className="mb-3 flex items-center justify-between">
+                <h3 className="font-bold text-slate-800">Slideshow — widgets & order</h3>
+                <label className="text-sm text-slate-600">
+                  Seconds / slide{" "}
+                  <input
+                    type="number"
+                    min={3}
+                    value={sc2.sec}
+                    onChange={(e) => saveSlide({ ...sc2, sec: Math.max(3, Number(e.target.value) || 15) })}
+                    className="w-16 rounded border border-slate-200 px-2 py-1 text-right"
+                  />
+                </label>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Showing ({sc2.widgets.length})</p>
+                  <ul className="space-y-1">
+                    {sc2.widgets.map((id, idx) => (
+                      <li key={id} className="flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-sm">
+                        <span className="flex-1 truncate text-slate-700">{idx + 1}. {labelOf(id)}</span>
+                        <button onClick={() => moveWidget(id, -1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move up">↑</button>
+                        <button onClick={() => moveWidget(id, 1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move down">↓</button>
+                        <button onClick={() => removeWidget(id)} className="px-1 text-rose-400 hover:text-rose-600" aria-label="Remove">✕</button>
+                      </li>
+                    ))}
+                    {sc2.widgets.length === 0 && <li className="text-xs text-slate-400">None selected — showing all by default</li>}
+                  </ul>
+                </div>
+                <div>
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Available</p>
+                  <ul className="space-y-1">
+                    {SLIDESHOW_WIDGETS.filter((w) => !sc2.widgets.includes(w.id)).map((w) => (
+                      <li key={w.id} className="flex items-center gap-2 rounded-lg px-2 py-1 text-sm">
+                        <span className="flex-1 truncate text-slate-500">{w.label}</span>
+                        <button onClick={() => addWidget(w.id)} className="rounded bg-blue-50 px-2 py-0.5 text-blue-600 hover:bg-blue-100">+ add</button>
+                      </li>
+                    ))}
+                    {SLIDESHOW_WIDGETS.every((w) => sc2.widgets.includes(w.id)) && <li className="text-xs text-slate-400">All widgets added</li>}
+                  </ul>
+                </div>
+              </div>
+            </div>
+
             <p className="mt-5 text-xs text-slate-400">
-              Tip: on each TV open <code className="font-mono">/kiosk?screen=1</code> and <code className="font-mono">/kiosk?screen=2</code>, press F11 for fullscreen. Press <b>S</b> anytime to reopen this panel. Set rotation to 0 to keep one page fixed.
+              Tip: on each TV open <code className="font-mono">/kiosk?screen=1</code> and <code className="font-mono">/kiosk?screen=2</code>, press F11 for fullscreen. Press <b>S</b> anytime to reopen this panel. Set a screen&apos;s page to <b>Slideshow</b> to use the widget list above.
             </p>
           </div>
         </div>
