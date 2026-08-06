@@ -46,7 +46,7 @@ export function FinanceView({ initial }: { initial: FinanceData }) {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-emerald-600 to-teal-600 px-7 py-6 text-white shadow-lg shadow-emerald-600/20">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Financial Dashboard</h1>
-          <p className="mt-1 text-sm text-emerald-100">Management view · all figures exclude GST</p>
+          <p className="mt-1 text-sm text-emerald-100">Invoiced revenue · ex-GST · matches PrimeEco receivables</p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <NavTabs />
@@ -67,22 +67,22 @@ export function FinanceView({ initial }: { initial: FinanceData }) {
 
       {/* Headline earnings */}
       <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-        <MoneyTile label="Earned — All Time" value={t.allTime} icon={Banknote} tint="emerald" big />
-        <MoneyTile label="This Year" value={t.thisYear} icon={CalendarRange} tint="teal" big />
-        <MoneyTile label="This Month" value={t.thisMonth} icon={CalendarDays} tint="blue" big />
-        <MoneyTile label="Today" value={t.today} icon={Sun} tint="amber" big />
+        <MoneyTile label="Invoiced — All Time" value={t.allTime} icon={Banknote} tint="emerald" big />
+        <MoneyTile label="Invoiced — This Year" value={t.thisYear} icon={CalendarRange} tint="teal" big />
+        <MoneyTile label="Invoiced — This Month" value={t.thisMonth} icon={CalendarDays} tint="blue" big />
+        <MoneyTile label="Invoiced — Today" value={t.today} icon={Sun} tint="amber" big />
       </div>
 
       <div className="mt-4 grid grid-cols-2 gap-4 md:grid-cols-4">
-        <MoneyTile label="Settled / Invoiced" value={t.earned} icon={Coins} tint="green" />
+        <MoneyTile label="Collected (paid)" value={t.earned} icon={Coins} tint="green" />
         <MoneyTile label="Forecast — Next 3 Mo" value={data.forecastTotal} icon={TrendingUp} tint="violet" />
-        <MoneyTile label="Avg per Job" value={t.avgPerJob} icon={Gauge} tint="blue" />
-        <CountTile label="Total Jobs" value={t.jobCount} icon={CalendarDays} />
+        <MoneyTile label="Avg per Invoice" value={t.avgPerJob} icon={Gauge} tint="blue" />
+        <CountTile label="Invoices" value={t.jobCount} icon={CalendarDays} />
       </div>
 
       {/* Monthly revenue + forecast */}
       <div className="mt-5">
-        <Panel title="Monthly Revenue & Forecast" subtitle="last 12 months + 3-month projection (ex-GST)">
+        <Panel title="Monthly Invoiced Revenue & Forecast" subtitle="invoiced ex-GST · last 12 months + 3-month projection">
           <RevenueForecastChart monthly={data.monthly} mounted={mounted} />
         </Panel>
       </div>
@@ -98,7 +98,7 @@ export function FinanceView({ initial }: { initial: FinanceData }) {
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-400">
-        All monetary figures exclude GST · sourced live from PrimeEco · grouped by job created date
+        All figures ex-GST · from receivable invoices (excl. Draft/Cancelled) · by invoiced date · matches PrimeEco
       </p>
     </div>
   )

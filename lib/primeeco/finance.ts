@@ -1,15 +1,14 @@
 import "server-only"
-import { getDashboardData } from "./index"
-import { isCompleted } from "./aggregate"
-import type { DashboardJob } from "./types"
+import { getReceivablesData } from "./receivables"
+import type { ArRow } from "./receivables"
 
 /**
- * Financial aggregation for the management dashboard. Every figure is EX-GST —
- * it uses DashboardJob.value, which is sourced from
- * authorisedTotalExcludingTax. Jobs are grouped by their created date.
+ * Financial aggregation for the management dashboard — now sourced from the
+ * ACCURATE Accounts Receivable invoices (validated against PrimeEco: last month
+ * = 369,758.68). Every figure is EX-GST (invoice subtotal), grouped by
+ * invoicedDate, excluding Draft & Cancelled (handled in receivables.ts).
  *
- * Reuses getDashboardData() so it shares the same cached PrimeEco fetch (no
- * extra API calls / rate-limit cost).
+ * Reuses getReceivablesData() so it shares the same cached AR fetch.
  */
 
 export interface FinancePoint {
@@ -30,19 +29,18 @@ export interface FinanceData {
   error?: string
   generatedAt: string
   totals: {
-    allTime: number
-    earned: number // completed / settled jobs
+    allTime: number // total invoiced (ex-GST)
+    earned: number // collected (paid)
     thisYear: number
     thisMonth: number
     today: number
-    avgPerJob: number
-    jobCount: number
+    avgPerJob: number // avg per invoice
+    jobCount: number // invoice count
   }
   byYear: { year: number; value: number; count: number }[]
   /** Last 12 actual months + a 3-month forecast (projected: true). */
   monthly: FinancePoint[]
   byClient: FinanceClient[]
-  /** Sum of the forecast months, for the headline "projected" figure. */
   forecastTotal: number
 }
 
@@ -64,10 +62,7 @@ function forecast(history: number[], periods: number): number[] {
   return Array.from({ length: periods }, (_, k) => Math.max(0, intercept + slope * (m + k)))
 }
 
-export function aggregateFinance(
-  jobs: DashboardJob[],
-  meta: { live: boolean; error?: string },
-): FinanceData {
+function aggregate(invoices: ArRow[], meta: { live: boolean; error?: string }): FinanceData {
   const now = new Date()
   const y = now.getFullYear()
   const mth = now.getMonth()
@@ -83,42 +78,40 @@ export function aggregateFinance(
   const monthMap = new Map<string, number>()
   const clientMap = new Map<string, { value: number; count: number }>()
 
-  for (const j of jobs) {
-    const v = j.value
+  for (const inv of invoices) {
+    const v = inv.exGst
     allTime += v
-    if (isCompleted(j)) earned += v
+    if (inv.paid) earned += v
 
-    const cName = j.client ?? "Unknown"
+    const cName = inv.client || "Unknown"
     const c = clientMap.get(cName) ?? { value: 0, count: 0 }
     c.value += v
     c.count += 1
     clientMap.set(cName, c)
 
-    if (!j.createdAt) continue
-    const d = new Date(j.createdAt)
-    const jy = d.getFullYear()
+    if (!inv.invoicedDate) continue
+    const [yy, mm] = inv.invoicedDate.split("-")
+    const jy = Number(yy)
+    const jm = Number(mm) - 1
+
     const ym = yearMap.get(jy) ?? { value: 0, count: 0 }
     ym.value += v
     ym.count += 1
     yearMap.set(jy, ym)
 
-    const mKey = `${jy}-${String(d.getMonth() + 1).padStart(2, "0")}`
-    monthMap.set(mKey, (monthMap.get(mKey) ?? 0) + v)
+    monthMap.set(`${jy}-${String(jm + 1).padStart(2, "0")}`, (monthMap.get(`${jy}-${String(jm + 1).padStart(2, "0")}`) ?? 0) + v)
 
     if (jy === y) thisYear += v
-    if (jy === y && d.getMonth() === mth) thisMonth += v
-    if (j.createdAt.slice(0, 10) === todayKey) today += v
+    if (jy === y && jm === mth) thisMonth += v
+    if (inv.invoicedDate === todayKey) today += v
   }
 
-  // Last 12 months of actuals.
   const monthly: FinancePoint[] = []
   for (let i = 11; i >= 0; i--) {
     const d = new Date(y, mth - i, 1)
     const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`
     monthly.push({ key, label: MONTHS[d.getMonth()], value: monthMap.get(key) ?? 0 })
   }
-
-  // 3-month forecast appended.
   const proj = forecast(monthly.map((p) => p.value), 3)
   proj.forEach((value, k) => {
     const d = new Date(y, mth + 1 + k, 1)
@@ -144,8 +137,8 @@ export function aggregateFinance(
       thisYear,
       thisMonth,
       today,
-      jobCount: jobs.length,
-      avgPerJob: jobs.length ? allTime / jobs.length : 0,
+      jobCount: invoices.length,
+      avgPerJob: invoices.length ? allTime / invoices.length : 0,
     },
     byYear,
     monthly,
@@ -155,6 +148,6 @@ export function aggregateFinance(
 }
 
 export async function getFinanceData(): Promise<FinanceData> {
-  const dash = await getDashboardData()
-  return aggregateFinance(dash.jobs, { live: dash.live, error: dash.error })
+  const ar = await getReceivablesData()
+  return aggregate(ar.invoices, { live: ar.live, error: ar.error })
 }
