@@ -82,15 +82,21 @@ const getCachedAr = unstable_cache(fetchAr, ["primeeco-ar-invoices-v1"], {
 })
 
 export async function getReceivablesData(): Promise<ReceivablesData> {
-  const dash = await getDashboardData()
-  const jobById = new Map(dash.jobs.map((j) => [j.id, j]))
+  // Fetch invoices and the job data concurrently. The money figures come from
+  // the invoices alone, so a slow/failed job fetch never blocks them — it only
+  // affects the client/division/region enrichment.
+  const [dashRes, arRes] = await Promise.allSettled([getDashboardData(), getCachedAr()])
+
+  const dash = dashRes.status === "fulfilled" ? dashRes.value : null
+  const jobById = new Map((dash?.jobs ?? []).map((j) => [j.id, j]))
+  const live = dash?.live ?? false
 
   let raw: Envelope["data"] = []
   let error: string | undefined
-  try {
-    raw = await getCachedAr()
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load receivables"
+  if (arRes.status === "fulfilled") {
+    raw = arRes.value
+  } else {
+    error = arRes.reason instanceof Error ? arRes.reason.message : "Failed to load receivables"
   }
 
   const invoices: ArRow[] = (raw ?? [])
@@ -118,7 +124,7 @@ export async function getReceivablesData(): Promise<ReceivablesData> {
   const uniq = (arr: (string | null)[]) => [...new Set(arr.filter((x): x is string => Boolean(x)))].sort()
 
   return {
-    live: dash.live,
+    live,
     generatedAt: new Date().toISOString(),
     error,
     invoices,
