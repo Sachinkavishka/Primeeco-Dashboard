@@ -25,7 +25,6 @@ export function TrendChart({ data, height = 220 }: { data: TrendPoint[]; height?
 
   const linePath = pts.map((p, i) => `${i === 0 ? "M" : "L"} ${p.x} ${p.y}`).join(" ")
   const areaPath = `${linePath} L ${pts[pts.length - 1]?.x ?? padX} ${padTop + plotH} L ${padX} ${padTop + plotH} Z`
-  const last = pts[pts.length - 1]
 
   return (
     <svg viewBox={`0 0 ${W} ${H}`} width="100%" height={H} preserveAspectRatio="xMidYMid meet">
@@ -44,7 +43,11 @@ export function TrendChart({ data, height = 220 }: { data: TrendPoint[]; height?
 
       {pts.map((p, i) => (
         <g key={p.month}>
-          <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3} fill="#2a78d6" stroke="#fff" strokeWidth="2">
+          {/* count label above every point */}
+          <text x={p.x} y={p.y - 10} textAnchor="middle" style={{ fontSize: 11, fontWeight: 700, fill: "#1e293b" }}>
+            {fmtNumber(p.count)}
+          </text>
+          <circle cx={p.x} cy={p.y} r={i === pts.length - 1 ? 5 : 3.5} fill="#2a78d6" stroke="#fff" strokeWidth="2">
             <title>{`${p.label}: ${fmtNumber(p.count)} jobs`}</title>
           </circle>
           <text x={p.x} y={H - 8} textAnchor="middle" style={{ fontSize: 11, fill: "#94a3b8" }}>
@@ -52,12 +55,6 @@ export function TrendChart({ data, height = 220 }: { data: TrendPoint[]; height?
           </text>
         </g>
       ))}
-
-      {last && (
-        <text x={last.x} y={last.y - 12} textAnchor="middle" style={{ fontSize: 13, fontWeight: 700, fill: "#1e293b" }}>
-          {fmtNumber(last.count)}
-        </text>
-      )}
     </svg>
   )
 }

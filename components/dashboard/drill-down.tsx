@@ -5,6 +5,7 @@ import { X } from "lucide-react"
 import type { DashboardJob } from "@/lib/primeeco/types"
 import { fmtDate, fmtMoney } from "@/lib/format"
 import { catColor } from "./charts/palette"
+import { DonutChart } from "./charts/donut-chart"
 
 export interface DrillState {
   title: string
@@ -66,18 +67,14 @@ export function DrillDown({ drill, onClose }: { drill: DrillState; onClose: () =
           </button>
         </div>
 
-        {/* Status summary chips */}
-        <div className="flex flex-wrap gap-2 border-b border-slate-100 px-7 py-4">
-          {statusSummary.map((s) => (
-            <span
-              key={s.status}
-              className="inline-flex items-center gap-2 rounded-full bg-slate-50 px-3 py-1 text-sm font-medium text-slate-700"
-            >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: s.color }} />
-              {s.status}
-              <span className="font-bold tabular-nums text-slate-900">{s.count}</span>
-            </span>
-          ))}
+        {/* Jobs-by-status donut */}
+        <div className="border-b border-slate-100 px-7 py-4">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Jobs by status</p>
+          <DonutChart
+            data={statusSummary.map((s) => ({ label: s.status, value: s.count, color: s.color }))}
+            centerLabel="jobs"
+            size={160}
+          />
         </div>
 
         {/* Jobs table */}

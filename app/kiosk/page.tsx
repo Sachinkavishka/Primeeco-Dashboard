@@ -130,10 +130,10 @@ export default function KioskPage() {
     <div className="fixed inset-0 bg-black">
       <iframe ref={iframeRef} key={url} src={url} className="h-full w-full border-0" title={`Screen ${screen}`} />
 
-      {/* Gear button (subtle, corner) */}
+      {/* Settings button (visible, corner) */}
       <button
         onClick={() => setShowSettings(true)}
-        className="fixed bottom-3 right-3 z-40 rounded-full bg-slate-900/60 p-2 text-white/70 opacity-30 backdrop-blur transition hover:opacity-100"
+        className="fixed bottom-4 right-4 z-40 inline-flex items-center gap-2 rounded-full bg-slate-900/85 px-4 py-2.5 text-sm font-semibold text-white shadow-lg backdrop-blur transition hover:bg-slate-900"
         title="Display settings (or press S)"
         aria-label="Display settings"
       >
@@ -141,6 +141,7 @@ export default function KioskPage() {
           <circle cx="12" cy="12" r="3" />
           <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
         </svg>
+        Settings
       </button>
 
       {/* Settings overlay */}
