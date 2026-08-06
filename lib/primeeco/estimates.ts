@@ -89,16 +89,20 @@ const getCachedSnapshot = unstable_cache(fetchSnapshot, ["primeeco-estimates-sna
 })
 
 export async function getEstimatesData(): Promise<EstimatesData> {
-  const dash = await getDashboardData()
-  const jobById = new Map(dash.jobs.map((j) => [j.id, j]))
+  // Fetch estimates and job data concurrently; a slow/failed job fetch only
+  // affects the job-number/client/division enrichment, not the estimate totals.
+  const [dashRes, snapRes] = await Promise.allSettled([getDashboardData(), getCachedSnapshot()])
+
+  const dash = dashRes.status === "fulfilled" ? dashRes.value : null
+  const jobById = new Map((dash?.jobs ?? []).map((j) => [j.id, j]))
+  const live = dash?.live ?? false
 
   let raw: Envelope["data"] = []
   let error: string | undefined
-  try {
-    raw = await getCachedSnapshot()
-  } catch (e) {
-    error = e instanceof Error ? e.message : "Failed to load estimates"
-    raw = []
+  if (snapRes.status === "fulfilled") {
+    raw = snapRes.value
+  } else {
+    error = snapRes.reason instanceof Error ? snapRes.reason.message : "Failed to load estimates"
   }
 
   const estimates: EstimateRow[] = (raw ?? []).map((e) => {
@@ -124,9 +128,9 @@ export async function getEstimatesData(): Promise<EstimatesData> {
   const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
 
   return {
-    live: dash.live,
+    live,
     generatedAt: new Date().toISOString(),
-    error: error ?? (estimates.length === 0 && !dash.live ? "Not live — add credentials or check API" : undefined),
+    error: error ?? (estimates.length === 0 && !live ? "Not live — add credentials or check API" : undefined),
     estimates,
     estimators: uniq(estimates.map((e) => e.estimator)),
     statuses: uniq(estimates.map((e) => e.status)),
