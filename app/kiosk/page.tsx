@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
  */
 
 const VIEWS = {
+  slideshow: { label: "Slideshow (widget by widget)", url: "/slideshow" },
   operations: { label: "Operations", url: "/dashboard" },
   financial: { label: "Financial", url: "/finance" },
   receivable: { label: "Receivable", url: "/receivables" },
