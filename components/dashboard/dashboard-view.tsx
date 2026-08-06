@@ -24,6 +24,7 @@ import { BarList } from "./charts/bar-list"
 import { ColumnChart } from "./charts/column-chart"
 import { TrendChart } from "./charts/trend-chart"
 import { ChoroplethMap } from "./charts/choropleth-map"
+import { MiniDonut } from "./charts/mini-donut"
 import { AUSTRALIA_SHAPES, MELBOURNE_SHAPES, ACT_DOT, regionToState, regionToMetro } from "./charts/region-maps"
 import { catColor, OTHER_COLOR } from "./charts/palette"
 import { DrillDown, type DrillState } from "./drill-down"
@@ -121,6 +122,38 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
   const onMetroSelect = (code: string) =>
     setDrill({ title: `Melbourne — ${code}`, jobs: data.jobs.filter((j) => regionToMetro(j.region) === code) })
 
+  // --- per-assignee status pies (active jobs, shared status colours) -------
+  const assigneePies = useMemo(() => {
+    const active = data.jobs.filter((j) => !isCompleted(j))
+    const statusCount = new Map<string, number>()
+    for (const j of active) statusCount.set(j.status, (statusCount.get(j.status) ?? 0) + 1)
+    const topStatuses = [...statusCount.entries()].sort((a, b) => b[1] - a[1]).slice(0, 7).map(([s]) => s)
+    const colorOf = (s: string) => {
+      const i = topStatuses.indexOf(s)
+      return i >= 0 ? catColor(i) : OTHER_COLOR
+    }
+    const byAsg = new Map<string, DashboardJob[]>()
+    for (const j of active) {
+      const a = j.assignedTo ?? "Unassigned"
+      const arr = byAsg.get(a) ?? []
+      arr.push(j)
+      byAsg.set(a, arr)
+    }
+    const pies = [...byAsg.entries()]
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 8)
+      .map(([name, jobs]) => {
+        const m = new Map<string, number>()
+        for (const j of jobs) m.set(topStatuses.includes(j.status) ? j.status : "Other", (m.get(topStatuses.includes(j.status) ? j.status : "Other") ?? 0) + 1)
+        const dd = [...m.entries()]
+          .map(([label, value]) => ({ label, value, color: label === "Other" ? OTHER_COLOR : colorOf(label) }))
+          .sort((a, b) => b.value - a.value)
+        return { name, data: dd }
+      })
+    return { pies, topStatuses }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.jobs])
+
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 p-5 lg:p-7">
       {/* Header banner */}
@@ -201,6 +234,29 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
         </Panel>
         <Panel title="By Region" subtitle="all jobs · click to drill">
           <BarList items={data.byRegion} onSelect={drillByPersona("Region", (j) => j.region)} color="#4a3aa7" />
+        </Panel>
+      </div>
+
+      {/* Per-assignee status pies */}
+      <div className="mt-5">
+        <Panel title="Active Jobs by Assignee" subtitle="each pie = an assignee's active jobs by status · click to drill">
+          <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
+            {assigneePies.topStatuses.map((s, i) => (
+              <span key={s} className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ background: catColor(i) }} />
+                {s}
+              </span>
+            ))}
+            <span className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-600">
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: OTHER_COLOR }} />
+              Other
+            </span>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-8">
+            {assigneePies.pies.map((p) => (
+              <MiniDonut key={p.name} data={p.data} title={p.name} onClick={() => drillByPersona("Assignee", (j) => j.assignedTo)(p.name)} />
+            ))}
+          </div>
         </Panel>
       </div>
 
