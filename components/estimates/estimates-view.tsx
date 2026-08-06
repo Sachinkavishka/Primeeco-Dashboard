@@ -78,6 +78,15 @@ export function EstimatesView({ initial }: { initial: EstimatesData }) {
         </div>
       </header>
 
+      {(data.error || data.estimates.length === 0) && (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {data.estimates.length === 0
+            ? "No estimates loaded yet"
+            : `${data.estimates.length} estimates loaded`}
+          {data.error ? ` — ${data.error}` : ". If this persists, reload in a moment (the data refreshes periodically)."}
+        </div>
+      )}
+
       {/* Filters */}
       <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
         <Select label="Estimator" value={f.estimator} options={data.estimators} onChange={(v) => set({ estimator: v })} />

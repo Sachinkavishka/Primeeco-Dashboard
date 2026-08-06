@@ -31,6 +31,7 @@ export interface EstimateRow {
 export interface EstimatesData {
   live: boolean
   generatedAt: string
+  error?: string
   estimates: EstimateRow[]
   // Distinct values for the filter dropdowns.
   estimators: string[]
@@ -57,15 +58,28 @@ const iso = (v: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
+const PER_PAGE = 500
+
 async function fetchSnapshot(): Promise<Envelope["data"]> {
   const rows: NonNullable<Envelope["data"]> = []
-  for (let p = 1; p <= 30; p++) {
-    const r = await apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: p, per_page: 100 } })
+  let failed = false
+  for (let p = 1; p <= 12; p++) {
+    let r: Envelope
+    try {
+      r = await apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: p, per_page: PER_PAGE } })
+    } catch {
+      // Rate limit or transient error — keep whatever pages we already got.
+      failed = true
+      break
+    }
     const items = r.data ?? []
     rows.push(...items)
     const tp = r.meta?.pagination?.total_pages
-    if (items.length < 100 || (tp !== undefined && p >= tp)) break
+    if (items.length < PER_PAGE || (tp !== undefined && p >= tp)) break
   }
+  // Only a TOTAL failure throws (so unstable_cache doesn't cache an empty result);
+  // a partial result is returned and cached.
+  if (rows.length === 0 && failed) throw new Error("estimates snapshot fetch failed (rate limit?)")
   return rows
 }
 
@@ -79,9 +93,11 @@ export async function getEstimatesData(): Promise<EstimatesData> {
   const jobById = new Map(dash.jobs.map((j) => [j.id, j]))
 
   let raw: Envelope["data"] = []
+  let error: string | undefined
   try {
     raw = await getCachedSnapshot()
-  } catch {
+  } catch (e) {
+    error = e instanceof Error ? e.message : "Failed to load estimates"
     raw = []
   }
 
@@ -110,6 +126,7 @@ export async function getEstimatesData(): Promise<EstimatesData> {
   return {
     live: dash.live,
     generatedAt: new Date().toISOString(),
+    error: error ?? (estimates.length === 0 && !dash.live ? "Not live — add credentials or check API" : undefined),
     estimates,
     estimators: uniq(estimates.map((e) => e.estimator)),
     statuses: uniq(estimates.map((e) => e.status)),

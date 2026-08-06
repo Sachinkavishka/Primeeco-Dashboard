@@ -31,8 +31,8 @@ interface ListEnvelope {
 // Lookups (statuses/users/contacts ~1,700 rows) change rarely, and contacts
 // alone is ~17 requests. Cache for 6h to protect the 5,000/day rate limit.
 const TTL_MS = 6 * 60 * 60 * 1000
-const PER_PAGE = 100
-const MAX_PAGES = 30 // safety cap (~3,000 rows) to respect rate limits
+const PER_PAGE = 500
+const MAX_PAGES = 12 // safety cap (~6,000 rows) to respect rate limits
 
 let cache: { data: Lookups; expiresAt: number } | null = null
 let inflight: Promise<Lookups> | null = null

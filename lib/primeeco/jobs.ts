@@ -13,9 +13,9 @@ interface ListEnvelope<T> {
   links?: { next?: string | null }
 }
 
-const PER_PAGE = 100
+const PER_PAGE = 500
 /** Safety cap so a runaway dataset can't exhaust the 60-req/min rate limit. */
-const MAX_PAGES = 20
+const MAX_PAGES = 12
 
 /**
  * Fetch all jobs across pages (bounded by MAX_PAGES), newest first.
