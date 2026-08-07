@@ -9,6 +9,7 @@ const tabs = [
   { href: "/finance", label: "Financial" },
   { href: "/receivables", label: "Receivable" },
   { href: "/estimates", label: "Estimates" },
+  { href: "/settings", label: "Settings" },
 ]
 
 /** Tab switcher between the Operations and Financial dashboards (sits in the
