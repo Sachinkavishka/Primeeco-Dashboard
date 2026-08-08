@@ -3,7 +3,6 @@
 import Link from "next/link"
 import { Monitor, Play } from "lucide-react"
 import { NavTabs } from "@/components/nav-tabs"
-import { Logo } from "@/components/logo"
 import { SlideshowWidgetPicker } from "@/components/slideshow/widget-picker"
 
 const LAUNCH = [
@@ -18,12 +17,9 @@ export default function SettingsPage() {
   return (
     <div className="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 p-5 lg:p-7">
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-slate-800 to-slate-700 px-7 py-6 text-white shadow-lg">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Display Settings</h1>
-            <p className="mt-1 text-sm text-slate-300">Configure the slideshow here, then open a display and press F11 for fullscreen.</p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Display Settings</h1>
+          <p className="mt-1 text-sm text-slate-300">Configure the slideshow here, then open a display and press F11 for fullscreen.</p>
         </div>
         <NavTabs />
       </header>

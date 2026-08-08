@@ -16,7 +16,6 @@ import { ChoroplethMap } from "@/components/dashboard/charts/choropleth-map"
 import { JobsTable } from "@/components/dashboard/jobs-table"
 import { catColor, OTHER_COLOR } from "@/components/dashboard/charts/palette"
 import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro, divisionToState } from "@/components/dashboard/charts/region-maps"
-import { Logo } from "@/components/logo"
 import { loadSlideshowConfig, SLIDESHOW_KEY, SLIDESHOW_WIDGETS, type SlideshowConfig } from "./widgets"
 
 const REFRESH_MS = 120_000
@@ -116,14 +115,14 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gradient-to-b from-slate-50 to-slate-100">
-      {/* Header */}
-      <header className="flex items-center justify-between gap-4 bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-5 text-white">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Now showing</p>
-            <h1 className="text-4xl font-extrabold tracking-tight">{slide.title}</h1>
-          </div>
+      {/* Header — brand colours (navy → orange) + Poppins */}
+      <header
+        className="flex items-center justify-between gap-4 bg-gradient-to-r from-[#173a5e] via-[#1f4f7d] to-[#f2682c] px-8 py-5 text-white"
+        style={{ fontFamily: "var(--font-poppins), system-ui, sans-serif" }}
+      >
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-white/70">Now showing</p>
+          <h1 className="text-4xl font-extrabold tracking-tight">{slide.title}</h1>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <span

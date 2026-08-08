@@ -29,7 +29,6 @@ import { AUSTRALIA_SHAPES, MELBOURNE_SHAPES, ACT_DOT, regionToState, regionToMet
 import { catColor, OTHER_COLOR } from "./charts/palette"
 import { DrillDown, type DrillState } from "./drill-down"
 import { NavTabs } from "@/components/nav-tabs"
-import { Logo } from "@/components/logo"
 
 const REFRESH_MS = 120_000 // poll every 2 min; server data cache refreshes every 5 min
 const AGING_COLORS = ["#1baf7a", "#84cc16", "#eda100", "#eb6834", "#e34948"]
@@ -159,12 +158,9 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
     <div className="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 p-5 lg:p-7">
       {/* Header banner */}
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-600 px-7 py-6 text-white shadow-lg shadow-blue-600/20">
-        <div className="flex items-center gap-4">
-          <Logo />
-          <div>
-            <h1 className="text-3xl font-extrabold tracking-tight">Jobs Dashboard</h1>
-            <p className="mt-1 text-sm text-blue-100">{fmtNumber(data.totalJobs)} jobs · sourced live from PrimeEco</p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Jobs Dashboard</h1>
+          <p className="mt-1 text-sm text-blue-100">{fmtNumber(data.totalJobs)} jobs · sourced live from PrimeEco</p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <NavTabs />
