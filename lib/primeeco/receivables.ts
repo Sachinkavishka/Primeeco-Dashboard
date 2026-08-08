@@ -2,6 +2,7 @@ import "server-only"
 import { unstable_cache } from "next/cache"
 import { apiFetch } from "./client"
 import { getDashboardData } from "./index"
+import { getLookups } from "./lookups"
 
 /**
  * Accounts Receivable data from /accounts-receivable-invoices.
@@ -85,11 +86,13 @@ export async function getReceivablesData(): Promise<ReceivablesData> {
   // Fetch invoices and the job data concurrently. The money figures come from
   // the invoices alone, so a slow/failed job fetch never blocks them — it only
   // affects the client/division/region enrichment.
-  const [dashRes, arRes] = await Promise.allSettled([getDashboardData(), getCachedAr()])
+  const [dashRes, arRes, lookRes] = await Promise.allSettled([getDashboardData(), getCachedAr(), getLookups()])
 
   const dash = dashRes.status === "fulfilled" ? dashRes.value : null
   const jobById = new Map((dash?.jobs ?? []).map((j) => [j.id, j]))
   const live = dash?.live ?? false
+  // All configured divisions (so e.g. DFM-QLD shows in the filter even with no invoices yet).
+  const allDivisions = lookRes.status === "fulfilled" ? [...lookRes.value.divisionName.values()].sort() : []
 
   let raw: Envelope["data"] = []
   let error: string | undefined
@@ -128,7 +131,7 @@ export async function getReceivablesData(): Promise<ReceivablesData> {
     generatedAt: new Date().toISOString(),
     error,
     invoices,
-    divisions: uniq(invoices.map((e) => e.division)),
+    divisions: allDivisions.length ? allDivisions : uniq(invoices.map((e) => e.division)),
     clients: uniq(invoices.map((e) => e.client)),
     regions: uniq(invoices.map((e) => e.region)),
   }

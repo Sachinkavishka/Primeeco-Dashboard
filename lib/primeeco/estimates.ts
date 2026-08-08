@@ -2,6 +2,7 @@ import "server-only"
 import { unstable_cache } from "next/cache"
 import { apiFetch } from "./client"
 import { getDashboardData } from "./index"
+import { getLookups } from "./lookups"
 
 /**
  * Estimates dashboard data. Uses /estimates-snapshot (the LOCKED / authorised
@@ -91,11 +92,12 @@ const getCachedSnapshot = unstable_cache(fetchSnapshot, ["primeeco-estimates-sna
 export async function getEstimatesData(): Promise<EstimatesData> {
   // Fetch estimates and job data concurrently; a slow/failed job fetch only
   // affects the job-number/client/division enrichment, not the estimate totals.
-  const [dashRes, snapRes] = await Promise.allSettled([getDashboardData(), getCachedSnapshot()])
+  const [dashRes, snapRes, lookRes] = await Promise.allSettled([getDashboardData(), getCachedSnapshot(), getLookups()])
 
   const dash = dashRes.status === "fulfilled" ? dashRes.value : null
   const jobById = new Map((dash?.jobs ?? []).map((j) => [j.id, j]))
   const live = dash?.live ?? false
+  const allDivisions = lookRes.status === "fulfilled" ? [...lookRes.value.divisionName.values()].sort() : []
 
   let raw: Envelope["data"] = []
   let error: string | undefined
@@ -135,7 +137,7 @@ export async function getEstimatesData(): Promise<EstimatesData> {
     estimators: uniq(estimates.map((e) => e.estimator)),
     statuses: uniq(estimates.map((e) => e.status)),
     types: uniq(estimates.map((e) => e.type)),
-    divisions: uniq(estimates.map((e) => e.division)),
+    divisions: allDivisions.length ? allDivisions : uniq(estimates.map((e) => e.division)),
     clients: uniq(estimates.map((e) => e.client)),
   }
 }

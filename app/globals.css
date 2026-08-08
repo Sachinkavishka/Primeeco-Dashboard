@@ -24,3 +24,21 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Slideshow slide entrance */
+@keyframes fadeSlide {
+  from { opacity: 0; transform: translateY(16px) scale(0.985); }
+  to { opacity: 1; transform: none; }
+}
+.slide-anim {
+  animation: fadeSlide 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Generic gentle entrance for cards/widgets */
+@keyframes floatIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.float-in {
+  animation: floatIn 0.5s ease-out both;
+}

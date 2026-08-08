@@ -15,6 +15,7 @@ import { ChoroplethMap } from "@/components/dashboard/charts/choropleth-map"
 import { JobsTable } from "@/components/dashboard/jobs-table"
 import { catColor, OTHER_COLOR } from "@/components/dashboard/charts/palette"
 import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro } from "@/components/dashboard/charts/region-maps"
+import { Logo } from "@/components/logo"
 import { loadSlideshowConfig, SLIDESHOW_KEY, SLIDESHOW_WIDGETS, type SlideshowConfig } from "./widgets"
 
 const REFRESH_MS = 120_000
@@ -115,8 +116,14 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
   return (
     <div className="fixed inset-0 flex flex-col bg-gradient-to-b from-slate-50 to-slate-100">
       {/* Header */}
-      <header className="flex items-center justify-between bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-5 text-white">
-        <h1 className="text-3xl font-extrabold tracking-tight">{slide.title}</h1>
+      <header className="flex items-center justify-between gap-4 bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-5 text-white">
+        <div className="flex items-center gap-4">
+          <Logo height={40} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Now showing</p>
+            <h1 className="text-4xl font-extrabold tracking-tight">{slide.title}</h1>
+          </div>
+        </div>
         <div className="flex items-center gap-4 text-sm">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
@@ -135,7 +142,7 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
 
       {/* Slide body */}
       <main className="relative flex flex-1 items-center justify-center overflow-hidden p-8">
-        <div className="w-full max-w-6xl">{slide.node}</div>
+        <div key={i} className="slide-anim w-full max-w-7xl">{slide.node}</div>
 
         {/* click zones for manual nav */}
         <button aria-label="Previous" onClick={() => advance(-1)} className="absolute inset-y-0 left-0 w-1/6" />
@@ -231,7 +238,7 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
 
 function SlideCard({ children }: { children: React.ReactNode }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-8 shadow-[0_2px_24px_rgba(15,23,42,0.06)]">{children}</div>
+    <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-[0_2px_24px_rgba(15,23,42,0.06)]">{children}</div>
   )
 }
 
@@ -298,9 +305,9 @@ function buildSlides(data: DashboardData): Slide[] {
         </div>
       ),
     },
-    { id: "status", title: "Open Jobs by Status", node: <SlideCard><DonutChart data={statusDonut} centerLabel="open jobs" size={300} /></SlideCard> },
-    { id: "trend", title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={440} /></SlideCard> },
-    { id: "aging", title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={440} /></SlideCard> },
+    { id: "status", title: "Open Jobs by Status", node: <SlideCard><DonutChart data={statusDonut} centerLabel="open jobs" size={360} /></SlideCard> },
+    { id: "trend", title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={520} /></SlideCard> },
+    { id: "aging", title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={520} /></SlideCard> },
     { id: "byEstimator", title: "Active Jobs by Estimator", node: <SlideCard><BarList items={data.byEstimator} limit={12} color="#2a78d6" /></SlideCard> },
     { id: "byCaseManager", title: "Active Jobs by Case Manager", node: <SlideCard><BarList items={data.byCaseManager} limit={12} color="#1baf7a" /></SlideCard> },
     { id: "byAssignee", title: "Active Jobs by Assignee", node: <SlideCard><BarList items={data.byAssignee} limit={12} color="#eb6834" /></SlideCard> },
@@ -319,14 +326,14 @@ function buildSlides(data: DashboardData): Slide[] {
           </div>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             {asgPies.map((p) => (
-              <MiniDonut key={p.name} data={p.data} title={p.name} size={140} />
+              <MiniDonut key={p.name} data={p.data} title={p.name} size={160} />
             ))}
           </div>
         </SlideCard>
       ),
     },
-    { id: "stateMap", title: "Jobs by State", node: <SlideCard><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={460} /></SlideCard> },
-    { id: "melbourneMap", title: "Greater Melbourne", node: <SlideCard><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={460} /></SlideCard> },
+    { id: "stateMap", title: "Jobs by State", node: <SlideCard><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={540} /></SlideCard> },
+    { id: "melbourneMap", title: "Greater Melbourne", node: <SlideCard><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={540} /></SlideCard> },
     { id: "recentJobs", title: "Recent Jobs", node: <JobsTable jobs={data.jobs.slice(0, 14)} /> },
   ]
 }

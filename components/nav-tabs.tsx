@@ -3,27 +3,37 @@
 import { useEffect, useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import { Lock } from "lucide-react"
 
-const tabs = [
+const PUBLIC_TABS = [
   { href: "/dashboard", label: "Operations" },
+  { href: "/settings", label: "Settings" },
+]
+const FINANCE_TABS = [
   { href: "/finance", label: "Financial" },
   { href: "/receivables", label: "Receivable" },
   { href: "/estimates", label: "Estimates" },
-  { href: "/settings", label: "Settings" },
 ]
 
-/** Tab switcher between the Operations and Financial dashboards (sits in the
- *  coloured header banner, so styling assumes a dark background). */
+/** Tab switcher. Financial tabs appear only once management has unlocked
+ *  (readable `dfm_fin_ok` cookie); otherwise a lock link is shown. Hidden
+ *  entirely inside a kiosk (?kiosk=1) for a clean TV view. */
 export function NavTabs() {
   const pathname = usePathname()
   const [kiosk, setKiosk] = useState(false)
-  // Hide the tabs when embedded in a kiosk screen (?kiosk=1) for a clean TV view.
+  const [unlocked, setUnlocked] = useState(false)
+
   useEffect(() => {
     setKiosk(new URLSearchParams(window.location.search).has("kiosk"))
+    setUnlocked(document.cookie.split("; ").some((c) => c.startsWith("dfm_fin_ok=")))
   }, [])
+
   if (kiosk) return null
+
+  const tabs = unlocked ? [...PUBLIC_TABS, ...FINANCE_TABS] : PUBLIC_TABS
+
   return (
-    <nav className="flex gap-1 rounded-xl bg-white/15 p-1 backdrop-blur">
+    <nav className="flex flex-wrap gap-1 rounded-xl bg-white/15 p-1 backdrop-blur">
       {tabs.map((t) => {
         const active = pathname.startsWith(t.href)
         return (
@@ -38,6 +48,16 @@ export function NavTabs() {
           </Link>
         )
       })}
+      {!unlocked && (
+        <Link
+          href="/unlock"
+          className="inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold text-white/80 hover:bg-white/10"
+          title="Management access"
+        >
+          <Lock className="h-3.5 w-3.5" />
+          Management
+        </Link>
+      )}
     </nav>
   )
 }
