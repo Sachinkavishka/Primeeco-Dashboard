@@ -25,7 +25,7 @@ import { ColumnChart } from "./charts/column-chart"
 import { TrendChart } from "./charts/trend-chart"
 import { ChoroplethMap } from "./charts/choropleth-map"
 import { MiniDonut } from "./charts/mini-donut"
-import { AUSTRALIA_SHAPES, MELBOURNE_SHAPES, ACT_DOT, regionToState, regionToMetro } from "./charts/region-maps"
+import { AUSTRALIA_SHAPES, MELBOURNE_SHAPES, ACT_DOT, regionToState, regionToMetro, divisionToState } from "./charts/region-maps"
 import { catColor, OTHER_COLOR } from "./charts/palette"
 import { DrillDown, type DrillState } from "./drill-down"
 import { NavTabs } from "@/components/nav-tabs"
@@ -103,7 +103,7 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
   const stateCounts = useMemo(() => {
     const m: Record<string, number> = {}
     for (const j of data.jobs) {
-      const s = regionToState(j.region)
+      const s = divisionToState(j.division) ?? regionToState(j.region)
       if (s) m[s] = (m[s] ?? 0) + 1
     }
     return m
@@ -119,7 +119,7 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
   }, [data.jobs])
 
   const onStateSelect = (code: string) =>
-    setDrill({ title: `State: ${code}`, jobs: data.jobs.filter((j) => regionToState(j.region) === code) })
+    setDrill({ title: `State: ${code}`, jobs: data.jobs.filter((j) => (divisionToState(j.division) ?? regionToState(j.region)) === code) })
   const onMetroSelect = (code: string) =>
     setDrill({ title: `Melbourne — ${code}`, jobs: data.jobs.filter((j) => regionToMetro(j.region) === code) })
 

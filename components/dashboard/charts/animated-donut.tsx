@@ -74,19 +74,29 @@ export function AnimatedDonut({
             )
           })}
         </g>
-        {/* centre: current status (re-keyed so it pops each step) */}
+        {/* centre: just the count + % (status name goes on the pill below so
+            long names never overflow the donut) */}
         <g key={n} className="pop-zoom">
-          <text x="50%" y="45%" textAnchor="middle" style={{ fontSize: 22, fontWeight: 800, fill: current?.color ?? "#0f172a" }}>
-            {current?.label ?? ""}
-          </text>
-          <text x="50%" y="57%" textAnchor="middle" style={{ fontSize: 34, fontWeight: 800, fill: "#0f172a" }}>
+          <text x="50%" y="52%" textAnchor="middle" style={{ fontSize: 40, fontWeight: 800, fill: "#0f172a" }}>
             {fmtNumber(current?.value ?? 0)}
           </text>
-          <text x="50%" y="66%" textAnchor="middle" style={{ fontSize: 14, fill: "#94a3b8" }}>
+          <text x="50%" y="63%" textAnchor="middle" style={{ fontSize: 15, fill: "#94a3b8" }}>
             {Math.round((current?.frac ?? 0) * 100)}%
           </text>
         </g>
       </svg>
+
+      {/* current status — big pill below, wraps for long names */}
+      <div
+        key={n}
+        className="pop-zoom flex items-center gap-2.5 rounded-full px-5 py-2 text-center"
+        style={{ background: `${current?.color ?? "#64748b"}1a` }}
+      >
+        <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: current?.color ?? "#64748b" }} />
+        <span className="text-2xl font-bold" style={{ color: current?.color ?? "#0f172a" }}>
+          {current?.label ?? ""}
+        </span>
+      </div>
 
       {/* legend — items brighten as they're revealed */}
       <div className="flex max-w-3xl flex-wrap justify-center gap-x-5 gap-y-2">

@@ -15,15 +15,24 @@ import { useState } from "react"
 const SIZE = "h-7 sm:h-8 lg:h-9 xl:h-11 2xl:h-14"
 
 export function Logo({ className = "" }: { className?: string }) {
-  const [failed, setFailed] = useState(false)
+  // Show the SVG mark immediately; swap to /logo.png ONLY once it truly loads.
+  // Avoids a broken-image flash and always shows a logo even if the file is
+  // missing / onError doesn't fire on some hosts.
+  const [imgOk, setImgOk] = useState(false)
   return (
     <span className={`inline-flex items-center rounded-xl bg-white px-2.5 py-1.5 shadow-sm sm:px-3 ${className}`}>
-      {failed ? (
-        <LogoMark />
-      ) : (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src="/logo.png" alt="Detail Facility Management" className={`w-auto ${SIZE}`} onError={() => setFailed(true)} />
-      )}
+      {!imgOk && <LogoMark />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/logo.png"
+        alt="Detail Facility Management"
+        className={`w-auto ${SIZE}`}
+        style={{ display: imgOk ? "block" : "none" }}
+        onLoad={(e) => {
+          if (e.currentTarget.naturalWidth > 0) setImgOk(true)
+        }}
+        onError={() => setImgOk(false)}
+      />
     </span>
   )
 }

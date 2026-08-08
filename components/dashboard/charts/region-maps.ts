@@ -33,6 +33,25 @@ export function regionToState(region: string | null): string | null {
   return null
 }
 
+/**
+ * Map a PrimeEco DIVISION name to an Australian state. Divisions are state-based
+ * (DFM-VIC, DFM-QLD, SOLU TAS…) and more reliable for the national map than the
+ * region — e.g. some QLD-division jobs carry a Melbourne region.
+ */
+export function divisionToState(division: string | null): string | null {
+  if (!division) return null
+  const d = division.toLowerCase()
+  if (d.includes("qld") || d.includes("queensland")) return "QLD"
+  if (d.includes("tas") || d.includes("tasmania")) return "TAS"
+  if (d.includes("vic") || d.includes("victoria")) return "VIC"
+  if (d.includes("nsw") || d.includes("new south wales")) return "NSW"
+  if (d.includes("western australia") || /\bwa\b/.test(d)) return "WA"
+  if (d.includes("south australia")) return "SA"
+  if (d.includes("northern territory")) return "NT"
+  if (d.includes("capital territory") || /\bact\b/.test(d)) return "ACT"
+  return null
+}
+
 /** Map a PrimeEco region name to a greater-Melbourne metro zone. */
 export function regionToMetro(region: string | null): string | null {
   if (!region) return null

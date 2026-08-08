@@ -7,6 +7,7 @@ import { isCompleted } from "@/lib/primeeco/aggregate"
 import { fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { AnimatedDonut } from "@/components/dashboard/charts/animated-donut"
+import { DonutChart } from "@/components/dashboard/charts/donut-chart"
 import { TrendChart } from "@/components/dashboard/charts/trend-chart"
 import { ColumnChart } from "@/components/dashboard/charts/column-chart"
 import { BarList } from "@/components/dashboard/charts/bar-list"
@@ -14,7 +15,7 @@ import { MiniDonut } from "@/components/dashboard/charts/mini-donut"
 import { ChoroplethMap } from "@/components/dashboard/charts/choropleth-map"
 import { JobsTable } from "@/components/dashboard/jobs-table"
 import { catColor, OTHER_COLOR } from "@/components/dashboard/charts/palette"
-import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro } from "@/components/dashboard/charts/region-maps"
+import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro, divisionToState } from "@/components/dashboard/charts/region-maps"
 import { Logo } from "@/components/logo"
 import { loadSlideshowConfig, SLIDESHOW_KEY, SLIDESHOW_WIDGETS, type SlideshowConfig } from "./widgets"
 
@@ -236,12 +237,16 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
 
 /* ---------------------------------------------------------------- slides --- */
 
-function SlideCard({ children }: { children: React.ReactNode }) {
+function TitledCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="rounded-3xl border border-slate-200 bg-white p-10 shadow-[0_2px_24px_rgba(15,23,42,0.06)]">{children}</div>
+    <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-[0_2px_24px_rgba(15,23,42,0.06)]">
+      <h3 className="mb-4 text-xl font-bold text-slate-800">{title}</h3>
+      {children}
+    </div>
   )
 }
 
+/** Grouped slides: related widgets share a slide (row by row). */
 function buildSlides(data: DashboardData): Slide[] {
   const { kpis } = data
   const active = data.jobs.filter((j) => !isCompleted(j))
@@ -251,6 +256,12 @@ function buildSlides(data: DashboardData): Slide[] {
   const rest = data.statusBreakdown.slice(7)
   const statusDonut = top.map((s, idx) => ({ label: s.status, value: s.count, color: catColor(idx) }))
   if (rest.length) statusDonut.push({ label: "Other", value: rest.reduce((a, b) => a + b.count, 0), color: OTHER_COLOR })
+
+  // open vs completed
+  const splitDonut = [
+    { label: "Open / Active", value: kpis.activeJobs, color: "#2a78d6" },
+    { label: "Completed", value: kpis.completedJobs, color: "#1baf7a" },
+  ]
 
   // assignee pies
   const statusCount = new Map<string, number>()
@@ -278,19 +289,21 @@ function buildSlides(data: DashboardData): Slide[] {
       }
     })
 
-  // region rollups
+  // region + division rollups (division wins so DFM-QLD lands on QLD)
   const stateCounts: Record<string, number> = {}
   const metroCounts: Record<string, number> = {}
   for (const j of data.jobs) {
-    const s = regionToState(j.region)
+    const s = divisionToState(j.division) ?? regionToState(j.region)
     if (s) stateCounts[s] = (stateCounts[s] ?? 0) + 1
     const z = regionToMetro(j.region)
     if (z) metroCounts[z] = (metroCounts[z] ?? 0) + 1
   }
 
+  const two = "grid grid-cols-1 gap-6 lg:grid-cols-2"
+
   return [
     {
-      id: "kpis",
+      id: "overview",
       title: "Key Metrics",
       node: (
         <div className="grid grid-cols-2 gap-6 md:grid-cols-4">
@@ -305,17 +318,51 @@ function buildSlides(data: DashboardData): Slide[] {
         </div>
       ),
     },
-    { id: "status", title: "Open Jobs by Status", node: <SlideCard><AnimatedDonut data={statusDonut} size={360} secPer={2} /></SlideCard> },
-    { id: "trend", title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={520} /></SlideCard> },
-    { id: "aging", title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={520} /></SlideCard> },
-    { id: "byEstimator", title: "Active Jobs by Estimator", node: <SlideCard><BarList items={data.byEstimator} limit={12} color="#2a78d6" /></SlideCard> },
-    { id: "byCaseManager", title: "Active Jobs by Case Manager", node: <SlideCard><BarList items={data.byCaseManager} limit={12} color="#1baf7a" /></SlideCard> },
-    { id: "byAssignee", title: "Active Jobs by Assignee", node: <SlideCard><BarList items={data.byAssignee} limit={12} color="#eb6834" /></SlideCard> },
+    {
+      id: "statusMix",
+      title: "Job Status",
+      node: (
+        <div className={two}>
+          <TitledCard title="Open Jobs by Status"><AnimatedDonut data={statusDonut} size={300} secPer={2} /></TitledCard>
+          <TitledCard title="Open vs Completed"><div className="flex justify-center py-2"><DonutChart data={splitDonut} centerLabel="all jobs" size={260} /></div></TitledCard>
+        </div>
+      ),
+    },
+    {
+      id: "trendAging",
+      title: "Jobs Created & Aging",
+      node: (
+        <div className={two}>
+          <TitledCard title="Jobs Created — 12 Months"><TrendChart data={data.trend} height={340} /></TitledCard>
+          <TitledCard title="Active Job Aging"><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={340} /></TitledCard>
+        </div>
+      ),
+    },
+    {
+      id: "people",
+      title: "By Estimator & Case Manager",
+      node: (
+        <div className={two}>
+          <TitledCard title="By Estimator"><BarList items={data.byEstimator} limit={10} color="#2a78d6" /></TitledCard>
+          <TitledCard title="By Case Manager"><BarList items={data.byCaseManager} limit={10} color="#1baf7a" /></TitledCard>
+        </div>
+      ),
+    },
+    {
+      id: "assigneeDivision",
+      title: "By Assignee & Division",
+      node: (
+        <div className={two}>
+          <TitledCard title="By Assignee"><BarList items={data.byAssignee} limit={10} color="#eb6834" /></TitledCard>
+          <TitledCard title="By Division"><BarList items={data.byDivision} limit={8} color="#008300" /></TitledCard>
+        </div>
+      ),
+    },
     {
       id: "assigneePies",
-      title: "Active Jobs by Assignee — by Status",
+      title: "Assignee Jobs by Status",
       node: (
-        <SlideCard>
+        <TitledCard title="Active jobs per assignee, by status">
           <div className="mb-4 flex flex-wrap gap-x-4 gap-y-2">
             {topStatuses.map((s, idx) => (
               <span key={s} className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600">
@@ -329,11 +376,19 @@ function buildSlides(data: DashboardData): Slide[] {
               <MiniDonut key={p.name} data={p.data} title={p.name} size={160} />
             ))}
           </div>
-        </SlideCard>
+        </TitledCard>
       ),
     },
-    { id: "stateMap", title: "Jobs by State", node: <SlideCard><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={540} /></SlideCard> },
-    { id: "melbourneMap", title: "Greater Melbourne", node: <SlideCard><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={540} /></SlideCard> },
+    {
+      id: "geography",
+      title: "Where the Work Is",
+      node: (
+        <div className={two}>
+          <TitledCard title="Jobs by State"><ChoroplethMap shapes={AUSTRALIA_SHAPES} counts={stateCounts} viewBox="0 0 1000 900" actDot={ACT_DOT} height={420} /></TitledCard>
+          <TitledCard title="Greater Melbourne"><ChoroplethMap shapes={MELBOURNE_SHAPES} counts={metroCounts} viewBox="0 0 300 280" height={420} /></TitledCard>
+        </div>
+      ),
+    },
     { id: "recentJobs", title: "Recent Jobs", node: <JobsTable jobs={data.jobs.slice(0, 14)} /> },
   ]
 }

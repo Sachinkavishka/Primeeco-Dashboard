@@ -4,16 +4,13 @@
  */
 
 export const SLIDESHOW_WIDGETS = [
-  { id: "kpis", label: "Key Metrics" },
-  { id: "status", label: "Open Jobs by Status" },
-  { id: "trend", label: "Jobs Created (12mo)" },
-  { id: "aging", label: "Active Job Aging" },
-  { id: "byEstimator", label: "By Estimator" },
-  { id: "byCaseManager", label: "By Case Manager" },
-  { id: "byAssignee", label: "By Assignee" },
+  { id: "overview", label: "Key Metrics (totals)" },
+  { id: "statusMix", label: "Status + Open vs Completed" },
+  { id: "trendAging", label: "Jobs Created + Aging" },
+  { id: "people", label: "Estimator + Case Manager" },
+  { id: "assigneeDivision", label: "Assignee + Division" },
   { id: "assigneePies", label: "Assignee Status Pies" },
-  { id: "stateMap", label: "Jobs by State" },
-  { id: "melbourneMap", label: "Greater Melbourne" },
+  { id: "geography", label: "Maps (State + Melbourne)" },
   { id: "recentJobs", label: "Recent Jobs" },
 ] as const
 
