@@ -118,7 +118,7 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
       {/* Header */}
       <header className="flex items-center justify-between gap-4 bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-5 text-white">
         <div className="flex items-center gap-4">
-          <Logo height={40} />
+          <Logo />
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.2em] text-blue-200">Now showing</p>
             <h1 className="text-4xl font-extrabold tracking-tight">{slide.title}</h1>
