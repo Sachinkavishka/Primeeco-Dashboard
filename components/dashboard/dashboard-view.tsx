@@ -239,6 +239,9 @@ export function DashboardView({ initial }: { initial: DashboardData }) {
         <Panel title="By Region" subtitle="all jobs · click to drill">
           <BarList items={data.byRegion} onSelect={drillByPersona("Region", (j) => j.region)} color="#4a3aa7" />
         </Panel>
+        <Panel title="By Division" subtitle="all jobs · click to drill">
+          <BarList items={data.byDivision} onSelect={drillByPersona("Division", (j) => j.division)} color="#008300" />
+        </Panel>
       </div>
 
       {/* Per-assignee status pies */}

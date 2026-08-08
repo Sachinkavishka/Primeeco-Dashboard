@@ -136,6 +136,7 @@ export interface DashboardData {
   byCaseManager: PersonaBreakdownItem[]
   byAssignee: PersonaBreakdownItem[]
   byRegion: PersonaBreakdownItem[]
+  byDivision: PersonaBreakdownItem[]
   aging: AgingBucket[]
   /** Jobs created per calendar month (last 12), for the trend chart. */
   trend: TrendPoint[]

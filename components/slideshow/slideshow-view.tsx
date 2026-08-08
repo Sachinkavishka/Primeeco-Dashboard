@@ -6,7 +6,7 @@ import type { DashboardData, DashboardJob } from "@/lib/primeeco/types"
 import { isCompleted } from "@/lib/primeeco/aggregate"
 import { fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
 import { KpiCard } from "@/components/dashboard/kpi-card"
-import { DonutChart } from "@/components/dashboard/charts/donut-chart"
+import { AnimatedDonut } from "@/components/dashboard/charts/animated-donut"
 import { TrendChart } from "@/components/dashboard/charts/trend-chart"
 import { ColumnChart } from "@/components/dashboard/charts/column-chart"
 import { BarList } from "@/components/dashboard/charts/bar-list"
@@ -305,7 +305,7 @@ function buildSlides(data: DashboardData): Slide[] {
         </div>
       ),
     },
-    { id: "status", title: "Open Jobs by Status", node: <SlideCard><DonutChart data={statusDonut} centerLabel="open jobs" size={360} /></SlideCard> },
+    { id: "status", title: "Open Jobs by Status", node: <SlideCard><AnimatedDonut data={statusDonut} size={360} secPer={2} /></SlideCard> },
     { id: "trend", title: "Jobs Created — Last 12 Months", node: <SlideCard><TrendChart data={data.trend} height={520} /></SlideCard> },
     { id: "aging", title: "Active Job Aging", node: <SlideCard><ColumnChart data={data.aging.map((a, idx) => ({ label: a.label, value: a.count, color: AGING_COLORS[idx] }))} height={520} /></SlideCard> },
     { id: "byEstimator", title: "Active Jobs by Estimator", node: <SlideCard><BarList items={data.byEstimator} limit={12} color="#2a78d6" /></SlideCard> },

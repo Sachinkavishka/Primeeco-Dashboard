@@ -136,6 +136,7 @@ export function aggregateDashboard(
     byCaseManager: groupBy(active, (j) => j.caseManager),
     byAssignee: groupBy(active, (j) => j.assignedTo),
     byRegion: groupBy(jobs, (j) => j.region),
+    byDivision: groupBy(jobs, (j) => j.division),
     aging: buildAging(jobs),
     trend: buildTrend(jobs),
     jobs: [...jobs].sort((a, b) => (b.createdAt ?? "").localeCompare(a.createdAt ?? "")),

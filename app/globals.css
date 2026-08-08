@@ -42,3 +42,14 @@ body {
 .float-in {
   animation: floatIn 0.5s ease-out both;
 }
+
+/* Zoom pop for the animated pie's current segment/centre */
+@keyframes popZoom {
+  0% { opacity: 0; transform: scale(0.6); }
+  60% { transform: scale(1.08); }
+  100% { opacity: 1; transform: scale(1); }
+}
+.pop-zoom {
+  animation: popZoom 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center;
+}
