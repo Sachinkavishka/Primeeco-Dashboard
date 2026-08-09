@@ -51,7 +51,7 @@ export function AnimatedDonut({
   const current = segs[Math.min(n, segs.length) - 1]
 
   return (
-    <div className="flex flex-col items-center gap-5">
+    <div className="flex flex-col items-center gap-3">
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
         <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
           <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eef2f7" strokeWidth={stroke} />
@@ -89,25 +89,25 @@ export function AnimatedDonut({
       {/* current status — big pill below, wraps for long names */}
       <div
         key={n}
-        className="pop-zoom flex items-center gap-2.5 rounded-full px-5 py-2 text-center"
+        className="pop-zoom flex max-w-full items-center gap-2 rounded-full px-4 py-1.5 text-center"
         style={{ background: `${current?.color ?? "#64748b"}1a` }}
       >
-        <span className="h-3.5 w-3.5 shrink-0 rounded-full" style={{ background: current?.color ?? "#64748b" }} />
-        <span className="text-2xl font-bold" style={{ color: current?.color ?? "#0f172a" }}>
+        <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: current?.color ?? "#64748b" }} />
+        <span className="truncate text-lg font-bold" style={{ color: current?.color ?? "#0f172a" }}>
           {current?.label ?? ""}
         </span>
       </div>
 
       {/* legend — items brighten as they're revealed */}
-      <div className="flex max-w-3xl flex-wrap justify-center gap-x-5 gap-y-2">
+      <div className="flex max-w-full flex-wrap justify-center gap-x-3 gap-y-1">
         {data.map((d, idx) => (
           <span
             key={d.label}
-            className="inline-flex items-center gap-2 text-base transition-opacity duration-500"
+            className="inline-flex items-center gap-1.5 text-xs transition-opacity duration-500"
             style={{ opacity: idx < n ? 1 : 0.28 }}
           >
-            <span className="h-3.5 w-3.5 rounded-full" style={{ background: d.color }} />
-            <span className="text-slate-700">{d.label}</span>
+            <span className="h-2.5 w-2.5 rounded-full" style={{ background: d.color }} />
+            <span className="text-slate-600">{d.label}</span>
             <b className="tabular-nums text-slate-900">{fmtNumber(d.value)}</b>
           </span>
         ))}

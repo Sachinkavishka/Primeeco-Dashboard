@@ -348,8 +348,8 @@ function buildSlides(data: DashboardData): Slide[] {
       title: "Job Status",
       node: (
         <div className={two}>
-          <TitledCard title="Open Jobs by Status"><AnimatedDonut data={statusDonut} size={300} secPer={2} /></TitledCard>
-          <TitledCard title="Open vs Completed"><div className="flex justify-center py-2"><DonutChart data={splitDonut} centerLabel="all jobs" size={260} /></div></TitledCard>
+          <TitledCard title="Open Jobs by Status"><AnimatedDonut data={statusDonut} size={240} secPer={2} /></TitledCard>
+          <TitledCard title="Open vs Completed"><div className="flex justify-center py-2"><DonutChart data={splitDonut} centerLabel="all jobs" size={210} /></div></TitledCard>
         </div>
       ),
     },

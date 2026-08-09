@@ -58,22 +58,19 @@ const dateOnly = (v: unknown): string | null => {
 }
 
 async function fetchAr(): Promise<Envelope["data"]> {
-  const rows: NonNullable<Envelope["data"]> = []
-  let failed = false
-  for (let p = 1; p <= 8; p++) {
-    let r: Envelope
-    try {
-      r = await apiFetch<Envelope>("/accounts-receivable-invoices", { searchParams: { page: p, per_page: 500 } })
-    } catch {
-      failed = true
-      break
-    }
-    const items = r.data ?? []
-    rows.push(...items)
-    const tp = r.meta?.pagination?.total_pages
-    if (items.length < 500 || (tp !== undefined && p >= tp)) break
+  // Page 1 first, then the rest in parallel (fits the 10s serverless limit).
+  const first = await apiFetch<Envelope>("/accounts-receivable-invoices", { searchParams: { page: 1, per_page: 500 } })
+  const rows: NonNullable<Envelope["data"]> = [...(first.data ?? [])]
+  const totalPages = Math.min(8, first.meta?.pagination?.total_pages ?? 1)
+
+  if (totalPages > 1) {
+    const results = await Promise.allSettled(
+      Array.from({ length: totalPages - 1 }, (_, k) =>
+        apiFetch<Envelope>("/accounts-receivable-invoices", { searchParams: { page: k + 2, per_page: 500 } }),
+      ),
+    )
+    for (const r of results) if (r.status === "fulfilled") rows.push(...(r.value.data ?? []))
   }
-  if (rows.length === 0 && failed) throw new Error("AR invoice fetch failed (rate limit?)")
   return rows
 }
 

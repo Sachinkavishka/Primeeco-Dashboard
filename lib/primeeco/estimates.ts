@@ -62,25 +62,20 @@ const iso = (v: unknown): string | null => {
 const PER_PAGE = 500
 
 async function fetchSnapshot(): Promise<Envelope["data"]> {
-  const rows: NonNullable<Envelope["data"]> = []
-  let failed = false
-  for (let p = 1; p <= 12; p++) {
-    let r: Envelope
-    try {
-      r = await apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: p, per_page: PER_PAGE } })
-    } catch {
-      // Rate limit or transient error — keep whatever pages we already got.
-      failed = true
-      break
-    }
-    const items = r.data ?? []
-    rows.push(...items)
-    const tp = r.meta?.pagination?.total_pages
-    if (items.length < PER_PAGE || (tp !== undefined && p >= tp)) break
+  // Page 1 first (to learn the page count), then fetch the rest IN PARALLEL so
+  // total time ≈ one request — keeps us well within the 10s serverless limit.
+  const first = await apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: 1, per_page: PER_PAGE } })
+  const rows: NonNullable<Envelope["data"]> = [...(first.data ?? [])]
+  const totalPages = Math.min(12, first.meta?.pagination?.total_pages ?? 1)
+
+  if (totalPages > 1) {
+    const results = await Promise.allSettled(
+      Array.from({ length: totalPages - 1 }, (_, k) =>
+        apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: k + 2, per_page: PER_PAGE } }),
+      ),
+    )
+    for (const r of results) if (r.status === "fulfilled") rows.push(...(r.value.data ?? []))
   }
-  // Only a TOTAL failure throws (so unstable_cache doesn't cache an empty result);
-  // a partial result is returned and cached.
-  if (rows.length === 0 && failed) throw new Error("estimates snapshot fetch failed (rate limit?)")
   return rows
 }
 
