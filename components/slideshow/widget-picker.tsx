@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { SLIDESHOW_WIDGETS, SLIDESHOW_KEY, loadSlideshowConfig, type SlideshowConfig } from "./widgets"
+import { SLIDESHOW_WIDGETS, SLIDESHOW_KEY, loadSlideshowConfig, secFor, type SlideshowConfig } from "./widgets"
 
 /** Self-contained slideshow widget/order/interval picker (reads+writes the shared config). */
 export function SlideshowWidgetPicker() {
@@ -32,13 +32,15 @@ export function SlideshowWidgetPicker() {
   }
   const rm = (id: string) => save({ ...sc, widgets: sc.widgets.filter((w) => w !== id) })
   const add = (id: string) => save({ ...sc, widgets: [...sc.widgets, id] })
+  const setDuration = (id: string, val: number) =>
+    save({ ...sc, durations: { ...(sc.durations ?? {}), [id]: Math.max(3, val || 15) } })
 
   return (
     <div>
       <div className="mb-3 flex items-center justify-between">
-        <h3 className="font-bold text-slate-800">Slideshow — widgets &amp; order</h3>
+        <h3 className="font-bold text-slate-800">Slideshow — widgets, order &amp; timing</h3>
         <label className="text-sm text-slate-600">
-          Seconds / slide{" "}
+          Default seconds{" "}
           <input
             type="number"
             min={3}
@@ -50,14 +52,25 @@ export function SlideshowWidgetPicker() {
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Showing ({sc.widgets.length})</p>
+          <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Showing ({sc.widgets.length}) — set seconds per slide
+          </p>
           <ul className="space-y-1">
             {sc.widgets.map((id, idx) => (
-              <li key={id} className="flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1.5 text-sm">
+              <li key={id} className="flex items-center gap-1.5 rounded-lg bg-slate-50 px-2 py-1.5 text-sm">
                 <span className="flex-1 truncate text-slate-700">{idx + 1}. {labelOf(id)}</span>
-                <button onClick={() => move(id, -1)} className="px-1.5 text-slate-400 hover:text-slate-800" aria-label="Move up">↑</button>
-                <button onClick={() => move(id, 1)} className="px-1.5 text-slate-400 hover:text-slate-800" aria-label="Move down">↓</button>
-                <button onClick={() => rm(id)} className="px-1.5 text-rose-400 hover:text-rose-600" aria-label="Remove">✕</button>
+                <input
+                  type="number"
+                  min={3}
+                  value={secFor(sc, id)}
+                  onChange={(e) => setDuration(id, Number(e.target.value))}
+                  title="Seconds on this slide"
+                  className="w-14 rounded border border-slate-200 px-1.5 py-0.5 text-right"
+                />
+                <span className="text-xs text-slate-400">s</span>
+                <button onClick={() => move(id, -1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move up">↑</button>
+                <button onClick={() => move(id, 1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move down">↓</button>
+                <button onClick={() => rm(id)} className="px-1 text-rose-400 hover:text-rose-600" aria-label="Remove">✕</button>
               </li>
             ))}
             {sc.widgets.length === 0 && <li className="text-xs text-slate-400">None — the slideshow shows all widgets by default.</li>}

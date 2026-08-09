@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Briefcase, CheckCircle2, DollarSign, Gauge, PlusCircle, TrendingUp, Wallet } from "lucide-react"
 import type { DashboardData, DashboardJob } from "@/lib/primeeco/types"
 import { isCompleted } from "@/lib/primeeco/aggregate"
-import { fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
+import { fmtMoney, fmtMoneyCompact, fmtNumber } from "@/lib/format"
 import { KpiCard } from "@/components/dashboard/kpi-card"
 import { AnimatedDonut } from "@/components/dashboard/charts/animated-donut"
 import { DonutChart } from "@/components/dashboard/charts/donut-chart"
@@ -16,7 +16,7 @@ import { ChoroplethMap } from "@/components/dashboard/charts/choropleth-map"
 import { JobsTable } from "@/components/dashboard/jobs-table"
 import { catColor, OTHER_COLOR } from "@/components/dashboard/charts/palette"
 import { AUSTRALIA_SHAPES, ACT_DOT, MELBOURNE_SHAPES, regionToState, regionToMetro, divisionToState } from "@/components/dashboard/charts/region-maps"
-import { loadSlideshowConfig, SLIDESHOW_KEY, SLIDESHOW_WIDGETS, type SlideshowConfig } from "./widgets"
+import { loadSlideshowConfig, SLIDESHOW_KEY, SLIDESHOW_WIDGETS, secFor, type SlideshowConfig } from "./widgets"
 
 const REFRESH_MS = 120_000
 const AGING_COLORS = ["#1baf7a", "#84cc16", "#eda100", "#eb6834", "#e34948"]
@@ -38,7 +38,7 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
   useEffect(() => {
     setConfig(loadSlideshowConfig())
     const urlSec = Number(new URLSearchParams(window.location.search).get("sec"))
-    if (urlSec && urlSec >= 3) setConfig((c) => ({ widgets: (c ?? loadSlideshowConfig()).widgets, sec: urlSec }))
+    if (urlSec && urlSec >= 3) setConfig((c) => ({ ...(c ?? loadSlideshowConfig()), sec: urlSec }))
     const onStorage = (e: StorageEvent) => {
       if (e.key === SLIDESHOW_KEY) setConfig(loadSlideshowConfig())
     }
@@ -46,7 +46,13 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
     return () => window.removeEventListener("storage", onStorage)
   }, [])
 
-  const intervalSec = config?.sec ?? 15
+  // live wall clock
+  const [now, setNow] = useState<Date | null>(null)
+  useEffect(() => {
+    setNow(new Date())
+    const id = setInterval(() => setNow(new Date()), 1000)
+    return () => clearInterval(id)
+  }, [])
 
   // --- slideshow config editing (writes localStorage; kiosk stays in sync) --
   const sc: SlideshowConfig = config ?? { widgets: SLIDESHOW_WIDGETS.map((w) => w.id), sec: 15 }
@@ -65,6 +71,8 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
   }
   const removeWidget = (id: string) => saveConfig({ ...sc, widgets: sc.widgets.filter((w) => w !== id) })
   const addWidget = (id: string) => saveConfig({ ...sc, widgets: [...sc.widgets, id] })
+  const setDuration = (id: string, val: number) =>
+    saveConfig({ ...sc, durations: { ...(sc.durations ?? {}), [id]: Math.max(3, val || 15) } })
 
   // poll data
   useEffect(() => {
@@ -87,13 +95,14 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
     return chosen.length ? chosen : all
   }, [data, config])
 
-  // auto-advance
+  // auto-advance — each slide waits for ITS OWN duration (per-slide time)
   const advance = useCallback((dir: number) => setI((p) => (p + dir + slides.length) % slides.length), [slides.length])
   useEffect(() => {
-    if (paused) return
-    const id = setInterval(() => advance(1), intervalSec * 1000)
-    return () => clearInterval(id)
-  }, [advance, paused, intervalSec])
+    if (paused || slides.length <= 1) return
+    const sec = config ? secFor(config, slides[i]?.id ?? "") : 15
+    const timer = setTimeout(() => advance(1), Math.max(3, sec) * 1000)
+    return () => clearTimeout(timer)
+  }, [i, paused, config, slides, advance])
 
   // keyboard: arrows navigate, space pauses
   useEffect(() => {
@@ -133,10 +142,19 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
             <span className={`h-2 w-2 rounded-full ${data.live ? "bg-emerald-300 animate-pulse" : "bg-amber-300"}`} />
             {data.live ? "LIVE" : "SAMPLE"}
           </span>
-          <span className="tabular-nums text-blue-100">
+          <span className="tabular-nums text-white/80">
             {i + 1} / {slides.length}
           </span>
-          <span className="text-blue-100">{fmtTime(data.generatedAt)}</span>
+          {now && (
+            <div className="text-right leading-tight">
+              <div className="text-2xl font-extrabold tabular-nums">
+                {now.toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+              </div>
+              <div className="text-xs text-white/75">
+                {now.toLocaleDateString("en-AU", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}
+              </div>
+            </div>
+          )}
         </div>
       </header>
 
@@ -186,23 +204,31 @@ export function SlideshowView({ initial }: { initial: DashboardData }) {
                 <p className="text-sm text-slate-500">Pick what shows and in what order. Changes apply live.</p>
               </div>
               <label className="text-sm text-slate-600">
-                Seconds / slide{" "}
+                Default sec{" "}
                 <input
                   type="number"
                   min={3}
                   value={sc.sec}
                   onChange={(e) => saveConfig({ ...sc, sec: Math.max(3, Number(e.target.value) || 15) })}
-                  className="w-16 rounded border border-slate-200 px-2 py-1 text-right"
+                  className="w-14 rounded border border-slate-200 px-2 py-1 text-right"
                 />
               </label>
             </div>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Showing ({sc.widgets.length})</p>
+                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Showing ({sc.widgets.length}) · secs per slide</p>
                 <ul className="space-y-1">
                   {sc.widgets.map((id, idx) => (
                     <li key={id} className="flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1 text-sm">
                       <span className="flex-1 truncate text-slate-700">{idx + 1}. {labelOf(id)}</span>
+                      <input
+                        type="number"
+                        min={3}
+                        value={secFor(sc, id)}
+                        onChange={(e) => setDuration(id, Number(e.target.value))}
+                        title="Seconds on this slide"
+                        className="w-12 rounded border border-slate-200 px-1 py-0.5 text-right"
+                      />
                       <button onClick={() => moveWidget(id, -1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move up">↑</button>
                       <button onClick={() => moveWidget(id, 1)} className="px-1 text-slate-400 hover:text-slate-800" aria-label="Move down">↓</button>
                       <button onClick={() => removeWidget(id)} className="px-1 text-rose-400 hover:text-rose-600" aria-label="Remove">✕</button>

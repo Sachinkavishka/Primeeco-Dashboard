@@ -21,13 +21,16 @@ export const SLIDESHOW_KEY = "dfm-slideshow-v1"
 export interface SlideshowConfig {
   /** Ordered list of enabled widget ids. */
   widgets: string[]
-  /** Seconds per slide. */
+  /** Default seconds per slide (fallback when a slide has no specific time). */
   sec: number
+  /** Optional per-slide seconds, keyed by widget id. */
+  durations?: Record<string, number>
 }
 
 export const DEFAULT_SLIDESHOW: SlideshowConfig = {
   widgets: SLIDESHOW_WIDGETS.map((w) => w.id),
   sec: 15,
+  durations: {},
 }
 
 export function loadSlideshowConfig(): SlideshowConfig {
@@ -35,8 +38,16 @@ export function loadSlideshowConfig(): SlideshowConfig {
     const raw = localStorage.getItem(SLIDESHOW_KEY)
     if (!raw) return DEFAULT_SLIDESHOW
     const c = JSON.parse(raw) as SlideshowConfig
-    return Array.isArray(c.widgets) && c.widgets.length ? { widgets: c.widgets, sec: c.sec || 15 } : DEFAULT_SLIDESHOW
+    return Array.isArray(c.widgets) && c.widgets.length
+      ? { widgets: c.widgets, sec: c.sec || 15, durations: c.durations ?? {} }
+      : DEFAULT_SLIDESHOW
   } catch {
     return DEFAULT_SLIDESHOW
   }
+}
+
+/** Seconds for a specific slide: its per-slide time if set, else the default. */
+export function secFor(config: SlideshowConfig, id: string): number {
+  const d = config.durations?.[id]
+  return d && d >= 3 ? d : config.sec
 }
