@@ -41,10 +41,8 @@ function startOfToday(): number {
 }
 
 /**
- * Does this Connecteam shift belong to the given PrimeEco job? Coordinators name
- * shifts after the job (job number / address), so we match the job number token
- * inside the shift title. HEURISTIC — tune once we can compare live titles to
- * job numbers (e.g. if Connecteam's shift.jobId is set to the PrimeEco number).
+ * Fallback token match for the sample data (job number inside the shift title /
+ * id). Live data uses the exact jobId match below, so this only matters offline.
  */
 function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
   const num = jobNumber.replace(/[^0-9a-z]/gi, "").toLowerCase()
@@ -54,7 +52,13 @@ function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
 }
 
 function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
-  const matches = e.jobNumber && e.jobNumber !== "—" ? shifts.filter((s) => shiftMatchesJob(s, e.jobNumber)) : []
+  // Connecteam shift.jobId IS the PrimeEco job UUID (systems are synced), so we
+  // join exactly on it; the title-token heuristic is a fallback for sample data.
+  const matches = shifts.filter(
+    (s) =>
+      (s.ctJobId && e.jobId && s.ctJobId === e.jobId) ||
+      (e.jobNumber && e.jobNumber !== "—" && shiftMatchesJob(s, e.jobNumber)),
+  )
   const firstShift = matches
     .map((s) => s.start)
     .sort()

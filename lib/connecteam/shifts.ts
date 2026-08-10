@@ -42,11 +42,11 @@ async function fetchPaged<K extends string, T>(
 /** Resolve the scheduler ids to read — explicit config, else auto-discover. */
 async function resolveSchedulerIds(): Promise<string[]> {
   if (connecteamConfig.schedulerIds.length) return connecteamConfig.schedulerIds
-  const schedulers = await fetchPaged<"schedulers", { id?: string | number }>(
+  const schedulers = await fetchPaged<"schedulers", { schedulerId?: string | number; id?: string | number }>(
     "/scheduler/v1/schedulers",
     "schedulers",
   )
-  return schedulers.map((s) => String(s.id)).filter(Boolean)
+  return schedulers.map((s) => String(s.schedulerId ?? s.id)).filter((id) => id && id !== "undefined")
 }
 
 export async function fetchUsers(): Promise<CtUser[]> {

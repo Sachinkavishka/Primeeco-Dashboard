@@ -50,16 +50,35 @@ export function classifyType(title: string): string {
   return "Other"
 }
 
+/**
+ * Appointment type from the "Appoinment Type" custom field (their spelling).
+ * Dropdown values arrive as an array of { value } objects. Returns null when
+ * unset so the caller can fall back.
+ */
+function customFieldType(raw: RawShift): string | null {
+  const field = (raw.customFields ?? []).find((f) => /appoin|appt|type/i.test(f.name ?? ""))
+  if (!field) return null
+  const v = field.value
+  if (Array.isArray(v)) {
+    const parts = v.map((x) => toStr(x?.value)).filter(Boolean)
+    return parts.length ? parts.join(", ") : null
+  }
+  return toStr(v)
+}
+
 export function normalizeShift(raw: RawShift, schedulerId: string, userName: Map<string, string>): Shift {
   const id = toStr(raw.id) ?? crypto.randomUUID()
-  const title = toStr(raw.title) ?? "Untitled shift"
-  const userIds = (raw.userIds ?? []).map((u) => String(u)).filter(Boolean)
+  const rawTitle = toStr(raw.title)
+  const address = toStr(raw.locationData?.gps?.address)
+  const userIds = (raw.assignedUserIds ?? []).map((u) => String(u)).filter(Boolean)
 
-  // Draft detection: Connecteam has exposed this as isPublished OR isDraft
-  // depending on version. Treat "explicitly published" as the only confirmed
-  // state; anything else is tentative/draft.
-  const published = raw.isPublished === true || raw.isDraft === false
-  const status: Shift["status"] = published ? "published" : "draft"
+  // Type comes from the custom field; fall back to classifying the title.
+  const type = customFieldType(raw) ?? (rawTitle ? classifyType(rawTitle) : "Unspecified")
+  // Titles are usually blank in Connecteam — show something meaningful.
+  const title = rawTitle ?? (address ? address.split(",").slice(0, 2).join(",").trim() : type)
+
+  // Unpublished shifts are tentative drafts (and not yet synced to PrimeEco).
+  const status: Shift["status"] = raw.isPublished === true ? "published" : "draft"
 
   return {
     id,
@@ -67,12 +86,13 @@ export function normalizeShift(raw: RawShift, schedulerId: string, userName: Map
     start: toIso(raw.startTime) ?? new Date().toISOString(),
     end: toIso(raw.endTime) ?? toIso(raw.startTime) ?? new Date().toISOString(),
     ctJobId: toStr(raw.jobId),
+    address,
     userIds,
     userNames: userIds.map((uid) => userName.get(uid) ?? "Unknown").filter(Boolean),
     status,
     open: raw.isOpenShift === true || userIds.length === 0,
     schedulerId,
-    type: classifyType(title),
+    type,
   }
 }
 

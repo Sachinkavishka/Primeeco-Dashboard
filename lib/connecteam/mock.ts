@@ -55,6 +55,7 @@ export function getMockRoster(): { shifts: Shift[]; users: CtUser[] } {
         start: new Date(atHour(day, hour)).toISOString(),
         end: new Date(atHour(day, hour + 2)).toISOString(),
         ctJobId: `CT-${1000 + n}`,
+        address: title.split("—")[1]?.trim() ?? null,
         userIds,
         userNames: userIds.map((id) => TECHS.find((t) => t.id === id)?.name ?? "Unknown"),
         status: draft ? "draft" : "published",
