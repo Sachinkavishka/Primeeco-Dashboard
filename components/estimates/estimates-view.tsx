@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { ClipboardList, DollarSign, Layers, Users } from "lucide-react"
-import type { EstimatesData, EstimateRow } from "@/lib/primeeco/estimates"
+import type { EstimatesData, EstimateRow, EstimateState } from "@/lib/primeeco/estimates"
 import { fmtDate, fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
 import { BarList } from "@/components/dashboard/charts/bar-list"
@@ -12,13 +12,21 @@ const REFRESH_MS = 300_000
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 interface Filters {
+  state: "" | EstimateState
   estimator: string
   status: string
   type: string
   division: string
   client: string
 }
-const EMPTY: Filters = { estimator: "", status: "", type: "", division: "", client: "" }
+// Default to Authorised — the accurate "won work" (locked + authorised) figure.
+const EMPTY: Filters = { state: "authorised", estimator: "", status: "", type: "", division: "", client: "" }
+
+const STATE_TABS: { value: "" | EstimateState; label: string }[] = [
+  { value: "authorised", label: "Lock + Authorised" },
+  { value: "pending", label: "Lock + Pending" },
+  { value: "", label: "All" },
+]
 
 export function EstimatesView() {
   const [estimates, setEstimates] = useState<EstimateRow[]>([])
@@ -101,28 +109,51 @@ export function EstimatesView() {
     [estimates, jobMap],
   )
 
+  // De-duplicate version history: the snapshot holds multiple rows per estimate
+  // (one per saved version). Keep only the latest version of each estimate so
+  // totals don't over-count. This runs across the FULL accumulated set.
+  const deduped = useMemo(() => {
+    const latest = new Map<string, EstimateRow>()
+    for (const e of enriched) {
+      const prev = latest.get(e.estimateKey)
+      if (!prev || e.version > prev.version) latest.set(e.estimateKey, e)
+    }
+    return [...latest.values()]
+  }, [enriched])
+
   const options = useMemo(() => {
     const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
+    // Filter dropdown options respect the current state tab, so e.g. the status
+    // list only shows statuses that exist within the selected state.
+    const scope = f.state ? deduped.filter((e) => e.state === f.state) : deduped
     return {
-      estimators: uniq(enriched.map((e) => e.estimator)),
-      statuses: uniq(enriched.map((e) => e.status)),
-      types: uniq(enriched.map((e) => e.type)),
-      divisions: uniq(enriched.map((e) => e.division)),
-      clients: uniq(enriched.map((e) => e.client)),
+      estimators: uniq(scope.map((e) => e.estimator)),
+      statuses: uniq(scope.map((e) => e.status)),
+      types: uniq(scope.map((e) => e.type)),
+      divisions: uniq(scope.map((e) => e.division)),
+      clients: uniq(scope.map((e) => e.client)),
     }
-  }, [enriched])
+  }, [deduped, f.state])
+
+  // Counts per state tab (deduped), for the tab badges.
+  const stateCounts = useMemo(() => {
+    const c = { authorised: 0, pending: 0, rejected: 0, all: deduped.length }
+    for (const e of deduped) c[e.state]++
+    return c
+  }, [deduped])
 
   const rows = useMemo(
     () =>
-      enriched.filter(
+      deduped.filter(
         (e) =>
+          (!f.state || e.state === f.state) &&
           (!f.estimator || e.estimator === f.estimator) &&
           (!f.status || e.status === f.status) &&
           (!f.type || e.type === f.type) &&
           (!f.division || e.division === f.division) &&
           (!f.client || e.client === f.client),
       ),
-    [enriched, f],
+    [deduped, f],
   )
 
   const loadingMore = meta.loaded < meta.totalPages
@@ -139,7 +170,7 @@ export function EstimatesView() {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-violet-600 to-indigo-600 px-7 py-6 text-white shadow-lg shadow-violet-600/20">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Estimates by Estimator</h1>
-          <p className="mt-1 text-sm text-violet-100">Authorised / locked estimates · all figures exclude GST</p>
+          <p className="mt-1 text-sm text-violet-100">Locked snapshot estimates · real authorised ex-GST · switch Authorised / Pending below</p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <NavTabs />
@@ -167,6 +198,27 @@ export function EstimatesView() {
           {meta.error ? ` — ${meta.error}` : ". Reload in a moment if this persists."}
         </div>
       )}
+
+      {/* State tabs: Lock + Authorised / Lock + Pending / All */}
+      <div className="mb-4 inline-flex flex-wrap gap-1 rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        {STATE_TABS.map((t) => {
+          const count =
+            t.value === "" ? stateCounts.all : t.value === "authorised" ? stateCounts.authorised : stateCounts.pending
+          const active = f.state === t.value
+          return (
+            <button
+              key={t.label}
+              onClick={() => set({ state: t.value })}
+              className={`rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+                active ? "bg-violet-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-50"
+              }`}
+            >
+              {t.label}
+              <span className={`ml-2 tabular-nums ${active ? "text-violet-100" : "text-slate-400"}`}>{fmtNumber(count)}</span>
+            </button>
+          )
+        })}
+      </div>
 
       {/* Filters */}
       <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -263,7 +315,7 @@ export function EstimatesView() {
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-400">
-        Source: /estimates-snapshot (locked/authorised estimates) · all figures exclude GST
+        Source: /estimates-snapshot (locked estimates, latest version each) · real authorisedTotalExcludingTax · all figures exclude GST
       </p>
     </div>
   )
