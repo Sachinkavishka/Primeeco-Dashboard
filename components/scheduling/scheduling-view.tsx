@@ -18,6 +18,8 @@ import { Panel } from "@/components/dashboard/panel"
 import { NavTabs } from "@/components/nav-tabs"
 
 const REFRESH_MS = 300_000
+/** Faster poll while the estimated-hours coverage is still building. */
+const WARMUP_REFRESH_MS = 15_000
 
 const hm = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })
@@ -28,16 +30,21 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
   const [data, setData] = useState(initial)
 
   useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await fetch("/api/scheduling", { cache: "no-store" })
-        if (res.ok) setData((await res.json()) as SchedulingData)
-      } catch {
-        /* keep last good */
-      }
-    }, REFRESH_MS)
+    // Poll fast while hours coverage is building, then settle to the normal
+    // cadence once complete.
+    const id = setInterval(
+      async () => {
+        try {
+          const res = await fetch("/api/scheduling", { cache: "no-store" })
+          if (res.ok) setData((await res.json()) as SchedulingData)
+        } catch {
+          /* keep last good */
+        }
+      },
+      data.hoursComplete ? REFRESH_MS : WARMUP_REFRESH_MS,
+    )
     return () => clearInterval(id)
-  }, [])
+  }, [data.hoursComplete])
 
   const c = data.counts
   const available = data.availability.filter((t) => t.available)
@@ -249,7 +256,11 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
       <div className="mt-5">
         <Panel
           title="Estimated Labour — Recently Approved"
-          subtitle="from authorised estimate line items · hours and days reported separately"
+          subtitle={
+            data.hoursComplete
+              ? "from authorised estimate line items · hours and days reported separately"
+              : "loading estimate hours… coverage is still building, this fills in shortly"
+          }
         >
           <EstimatedLabourTable approvals={data.approvals} />
         </Panel>

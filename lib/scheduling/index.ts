@@ -189,6 +189,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
     connecteamLive: roster.live,
     generatedAt: new Date().toISOString(),
     showValues,
+    hoursComplete: usingMockApprovals ? true : hoursRes.complete,
     // Don't surface the PrimeEco "not configured" error on the sample board.
     error: (usingMockApprovals ? undefined : est.error) || roster.error,
     counts: {

@@ -77,6 +77,11 @@ export interface SchedulingData {
   generatedAt: string
   /** True when management is unlocked; when false, $ values are stripped. */
   showValues: boolean
+  /**
+   * False while estimated-hours coverage is still building (time-budgeted
+   * fetch) — the client polls faster until this flips true.
+   */
+  hoursComplete: boolean
   error?: string
 
   counts: {

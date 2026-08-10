@@ -18,7 +18,14 @@ import { apiFetch } from "./client"
  *
  * The endpoint ignores filters entirely and pages take ~1s each, so we pull
  * newest-first (order=createdAt|DESC) and stop once we've covered the window.
- * Cached ~4h — authorised-estimate hours don't change intraday.
+ *
+ * HOBBY-SAFE fetch strategy: a full window is ~12 pages (~9s+), which would
+ * blow Vercel Hobby's 10s function limit when stacked on the other dashboard
+ * fetches. So each REQUEST spends at most TIME_BUDGET_MS fetching; every page
+ * fetched goes through Next's Data Cache (4h TTL), so subsequent requests skip
+ * straight past cached pages and extend coverage. The client polls faster while
+ * `complete` is false, so the table fills within a poll or two and then serves
+ * instantly for the next 4 hours.
  */
 
 export type HoursRole = "Technician" | "Project Manager" | "Supervisor" | "Labourer" | "Other"
@@ -41,6 +48,11 @@ export interface EstimateHoursData {
   generatedAt: string
   /** Days of estimate-item history covered (createdAt window). */
   windowDays: number
+  /**
+   * False while the time-budgeted fetch hasn't covered the whole window yet —
+   * the client should poll again soon to extend coverage.
+   */
+  complete: boolean
   byJob: Record<string, JobEstimateHours>
   error?: string
 }
@@ -55,6 +67,12 @@ const PER_PAGE = 500
 const MAX_PAGES = 16 // hard cap (~8k newest lines) even if the window isn't reached
 const BATCH = 4 // PrimeEco allows 5 concurrent; leave one slot for other calls
 const REVALIDATE_S = 4 * 60 * 60 // "every few hours" freshness
+/**
+ * Max time one request may spend on UNCACHED page fetches. Hobby gives the
+ * whole function 10s and the scheduling page also loads estimates + roster,
+ * so keep this tight; coverage completes across the client's polls.
+ */
+const TIME_BUDGET_MS = 4_000
 
 const num = (v: unknown): number => {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? ""))
@@ -88,16 +106,31 @@ async function fetchPage(page: number): Promise<SnapshotEnvelope> {
 }
 
 /**
- * Fetch newest-first pages in small parallel batches until the whole window is
- * covered (or the cap is hit). Items older than the window are discarded.
+ * One page through Next's cross-invocation Data Cache. The page number is part
+ * of the cache key (unstable_cache keys include the fn arguments), so each page
+ * is fetched from PrimeEco at most once per 4h across ALL instances. Newer
+ * items shifting pages between refreshes is acceptable at this cadence.
  */
-async function fetchRecentItems(): Promise<Array<Record<string, unknown>>> {
-  const cutoff = Date.now() - WINDOW_DAYS * 86_400_000
+const getCachedPage = unstable_cache(fetchPage, ["primeeco-estimate-items-page-v1"], {
+  revalidate: REVALIDATE_S,
+  tags: ["primeeco-estimate-hours"],
+})
+
+/**
+ * Fetch newest-first pages in small parallel batches until the window is
+ * covered, the cap is hit, or the per-request time budget runs out (cached
+ * pages are ~free, so budget effectively applies to uncached fetches only).
+ * Items older than the window are discarded.
+ */
+async function fetchRecentItems(): Promise<{ items: Array<Record<string, unknown>>; complete: boolean }> {
+  const started = Date.now()
+  const cutoff = started - WINDOW_DAYS * 86_400_000
   const out: Array<Record<string, unknown>> = []
+  let complete = false
 
   for (let start = 1; start <= MAX_PAGES; start += BATCH) {
     const pageNums = Array.from({ length: Math.min(BATCH, MAX_PAGES - start + 1) }, (_, i) => start + i)
-    const pages = await Promise.all(pageNums.map(fetchPage))
+    const pages = await Promise.all(pageNums.map((p) => getCachedPage(p)))
 
     let reachedWindowEnd = false
     for (const p of pages) {
@@ -112,9 +145,14 @@ async function fetchRecentItems(): Promise<Array<Record<string, unknown>>> {
       }
       if (rows.length < PER_PAGE) reachedWindowEnd = true
     }
-    if (reachedWindowEnd) break
+    if (reachedWindowEnd || start + BATCH > MAX_PAGES) {
+      complete = true
+      break
+    }
+    // Out of budget — return what we have; the next poll continues from cache.
+    if (Date.now() - started > TIME_BUDGET_MS) break
   }
-  return out
+  return { items: out, complete }
 }
 
 function aggregate(items: Array<Record<string, unknown>>): Record<string, JobEstimateHours> {
@@ -142,26 +180,25 @@ function aggregate(items: Array<Record<string, unknown>>): Record<string, JobEst
   return byJob
 }
 
-async function fetchLive(): Promise<EstimateHoursData> {
-  const items = await fetchRecentItems()
-  return {
-    live: true,
-    generatedAt: new Date().toISOString(),
-    windowDays: WINDOW_DAYS,
-    byJob: aggregate(items),
-  }
-}
-
-const getCached = unstable_cache(fetchLive, ["primeeco-estimate-hours-v1"], {
-  revalidate: REVALIDATE_S,
-  tags: ["primeeco-estimate-hours"],
-})
-
+/**
+ * NOTE: deliberately NOT wrapped in an outer unstable_cache — that would freeze
+ * a partial (over-budget) result for the full TTL. The per-page cache above
+ * already makes repeat calls cheap; this function just re-aggregates.
+ */
 let lastGood: EstimateHoursData | null = null
 
 export async function getEstimateHours(): Promise<EstimateHoursData> {
   try {
-    const data = await getCached()
+    const { items, complete } = await fetchRecentItems()
+    const data: EstimateHoursData = {
+      live: true,
+      generatedAt: new Date().toISOString(),
+      windowDays: WINDOW_DAYS,
+      complete,
+      byJob: aggregate(items),
+    }
+    // Prefer a previously complete result over a fresh partial one.
+    if (!complete && lastGood?.complete) return lastGood
     lastGood = data
     return data
   } catch (err) {
@@ -170,6 +207,7 @@ export async function getEstimateHours(): Promise<EstimateHoursData> {
       live: false,
       generatedAt: new Date().toISOString(),
       windowDays: WINDOW_DAYS,
+      complete: false,
       byJob: {},
       error: err instanceof Error ? err.message : "Failed to load estimate hours",
     }
