@@ -99,12 +99,18 @@ function classify(status: string): EstimateState {
   return "pending"
 }
 
+// Snapshot data changes slowly, and the client now caches it per-day (see
+// estimates-view.tsx), so the upstream PrimeEco fetch only needs to happen a
+// couple of times a day at most. 6h TTL keeps a manual client refresh
+// reasonably fresh while sparing the daily quota.
+const REVALIDATE_S = 21_600 // 6 hours
+
 /** Fetch one raw page of /estimates-snapshot (cached per page id). */
 const getCachedPage = unstable_cache(
   async (page: number) =>
     apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page, per_page: PER_PAGE } }),
   ["primeeco-estimates-snapshot-v1"],
-  { revalidate: 1800, tags: ["primeeco-estimates"] },
+  { revalidate: REVALIDATE_S, tags: ["primeeco-estimates"] },
 )
 
 function normalize(e: NonNullable<Envelope["data"]>[number]): EstimateRow {

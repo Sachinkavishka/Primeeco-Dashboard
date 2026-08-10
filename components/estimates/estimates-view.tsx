@@ -1,15 +1,47 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ClipboardList, Clock, DollarSign, FolderOpen, Layers, Receipt, TrendingUp, Users } from "lucide-react"
+import { ClipboardList, Clock, DollarSign, FolderOpen, Layers, Receipt, RefreshCw, TrendingUp, Users } from "lucide-react"
 import type { EstimatesData, EstimateRow, EstimateState } from "@/lib/primeeco/estimates"
 import { fmtDate, fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
 import { BarList } from "@/components/dashboard/charts/bar-list"
 import { NavTabs } from "@/components/nav-tabs"
 
-const REFRESH_MS = 300_000
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+// The estimate snapshot is heavy (~2k rows streamed page-by-page) and changes
+// slowly, so we cache the fully-loaded result in the browser keyed to the day.
+// A normal page refresh then hydrates instantly from cache with NO network
+// calls; the feeds are only fetched on the first visit of the day (when the
+// cached date no longer matches) or when the user hits Refresh.
+const CK_EST = "dfm-est-snapshot-v2"
+const CK_JOBS = "dfm-est-jobs-v2"
+const CK_INV = "dfm-est-invoiced-v2"
+const CACHE_ROLLOVER_MS = 3_600_000 // re-check once an hour for the date rolling over (always-on displays)
+
+const todayStr = () => new Date().toISOString().slice(0, 10)
+
+function readDayCache<T extends object>(key: string): (T & { date: string }) | null {
+  if (typeof window === "undefined") return null
+  try {
+    const raw = window.localStorage.getItem(key)
+    if (!raw) return null
+    const v = JSON.parse(raw) as (T & { date: string }) | null
+    return v && typeof v.date === "string" && v.date === todayStr() ? v : null
+  } catch {
+    return null
+  }
+}
+
+function writeDayCache(key: string, value: object) {
+  if (typeof window === "undefined") return
+  try {
+    window.localStorage.setItem(key, JSON.stringify({ date: todayStr(), ...value }))
+  } catch {
+    /* quota exceeded / private mode — cache is best-effort */
+  }
+}
 
 interface Filters {
   state: "" | EstimateState
@@ -38,13 +70,25 @@ export function EstimatesView() {
     loaded: 0,
   })
   const [f, setF] = useState<Filters>(EMPTY)
+  // Bumped by the Refresh button / daily rollover to force a fresh network load.
+  const [refreshTick, setRefreshTick] = useState(0)
+  const [fromCache, setFromCache] = useState(false)
 
-  // Everything loads CLIENT-SIDE, one small page per request, so the page shell
-  // renders instantly and there's no server-side PrimeEco fetch to time out.
+  // Estimates: hydrate from today's cache instantly, else stream page-by-page
+  // and write the result to the day cache.
   useEffect(() => {
     let cancelled = false
 
-    const load = async (stream: boolean) => {
+    const cached = readDayCache<{ estimates: EstimateRow[]; generatedAt: string }>(CK_EST)
+    if (cached && cached.estimates?.length) {
+      setEstimates(cached.estimates)
+      setFromCache(true)
+      setMeta((m) => ({ ...m, live: true, generatedAt: cached.generatedAt, error: undefined, loaded: 1, totalPages: 1 }))
+      return
+    }
+
+    setFromCache(false)
+    const load = async () => {
       const acc: EstimateRow[] = []
       let p = 1
       let total = 1
@@ -59,7 +103,7 @@ export function EstimatesView() {
           if (cancelled) return
           acc.push(...d.estimates)
           total = d.totalPages
-          if (stream) setEstimates([...acc])
+          setEstimates([...acc])
           setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, error: d.error, totalPages: total, loaded: p }))
           p++
         } catch {
@@ -67,30 +111,41 @@ export function EstimatesView() {
           break
         }
       } while (p <= total)
-      if (!cancelled) setEstimates(acc)
+      if (!cancelled) {
+        setEstimates(acc)
+        if (acc.length) writeDayCache(CK_EST, { estimates: acc, generatedAt: new Date().toISOString() })
+      }
     }
 
-    load(true) // first load streams in
-    const id = setInterval(() => load(false), REFRESH_MS) // refresh replaces at end
+    load()
     return () => {
       cancelled = true
-      clearInterval(id)
     }
-  }, [])
+  }, [refreshTick])
 
   // Enrich estimates with job number / client / division / open-closed status
-  // from the ops job cache (fetched separately so the slow job load never
-  // blocks estimates).
+  // from the ops job cache (day-cached alongside the estimates).
   type JobInfo = { jobNumber: string; client: string | null; division: string | null; region: string | null; statusType: string | null }
   const [jobMap, setJobMap] = useState<Map<string, JobInfo>>(new Map())
   useEffect(() => {
     let cancelled = false
+    const cached = readDayCache<{ jobs: [string, JobInfo][] }>(CK_JOBS)
+    if (cached?.jobs) {
+      setJobMap(new Map(cached.jobs))
+      return
+    }
     ;(async () => {
       try {
         const res = await fetch("/api/dashboard", { cache: "no-store" })
         if (!res.ok) return
         const dash = (await res.json()) as { jobs: ({ id: string } & JobInfo)[] }
-        if (!cancelled) setJobMap(new Map(dash.jobs.map((j) => [j.id, j])))
+        if (cancelled) return
+        const entries: [string, JobInfo][] = dash.jobs.map((j) => [
+          j.id,
+          { jobNumber: j.jobNumber, client: j.client, division: j.division, region: j.region, statusType: j.statusType },
+        ])
+        setJobMap(new Map(entries))
+        writeDayCache(CK_JOBS, { jobs: entries })
       } catch {
         /* ignore — estimator totals still work without job detail */
       }
@@ -98,7 +153,7 @@ export function EstimatesView() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [refreshTick])
 
   // Which jobs already have an AR invoice — powers the invoiced vs to-be-invoiced
   // split. Fetched from the same finance-gated API the /receivables page uses;
@@ -106,12 +161,20 @@ export function EstimatesView() {
   const [invoicedJobIds, setInvoicedJobIds] = useState<Set<string>>(new Set())
   useEffect(() => {
     let cancelled = false
+    const cached = readDayCache<{ invoiced: string[] }>(CK_INV)
+    if (cached?.invoiced) {
+      setInvoicedJobIds(new Set(cached.invoiced))
+      return
+    }
     ;(async () => {
       try {
         const res = await fetch("/api/receivables", { cache: "no-store" })
         if (!res.ok) return
         const data = (await res.json()) as { invoices: { jobId: string }[] }
-        if (!cancelled) setInvoicedJobIds(new Set(data.invoices.map((i) => i.jobId).filter(Boolean)))
+        if (cancelled) return
+        const ids = data.invoices.map((i) => i.jobId).filter(Boolean)
+        setInvoicedJobIds(new Set(ids))
+        writeDayCache(CK_INV, { invoiced: ids })
       } catch {
         /* ignore — invoicing split degrades to "all to invoice" */
       }
@@ -119,7 +182,30 @@ export function EstimatesView() {
     return () => {
       cancelled = true
     }
+  }, [refreshTick])
+
+  // Daily rollover: on an always-on wall display, force a fresh load once the
+  // calendar day changes (the cache read then misses and re-fetches).
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (!readDayCache(CK_EST)) setRefreshTick((t) => t + 1)
+    }, CACHE_ROLLOVER_MS)
+    return () => clearInterval(id)
   }, [])
+
+  // Manual refresh: drop the day caches and re-fetch everything now.
+  const refresh = () => {
+    if (typeof window !== "undefined") {
+      try {
+        for (const k of [CK_EST, CK_JOBS, CK_INV]) window.localStorage.removeItem(k)
+      } catch {
+        /* ignore */
+      }
+    }
+    setEstimates([])
+    setMeta((m) => ({ ...m, loaded: 0, totalPages: 1 }))
+    setRefreshTick((t) => t + 1)
+  }
 
   const enriched = useMemo(
     () =>
@@ -229,7 +315,18 @@ export function EstimatesView() {
             <span className={`h-2 w-2 rounded-full ${meta.live ? "bg-emerald-200 animate-pulse" : "bg-amber-200"}`} />
             {meta.live ? "LIVE" : "SAMPLE"}
           </span>
-          <span className="text-sm">{fmtTime(meta.generatedAt)}</span>
+          <span className="text-sm" title={fromCache ? "Loaded from today's cache" : "Freshly fetched"}>
+            {fromCache ? "Cached " : "Updated "}
+            {fmtTime(meta.generatedAt)}
+          </span>
+          <button
+            onClick={refresh}
+            className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-white/25"
+            title="Fetch fresh estimates now (otherwise data is cached for the day)"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Refresh
+          </button>
         </div>
       </header>
 
