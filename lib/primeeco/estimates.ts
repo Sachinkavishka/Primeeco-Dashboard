@@ -2,7 +2,7 @@ import "server-only"
 import { unstable_cache } from "next/cache"
 import { apiFetch } from "./client"
 import { getDashboardData } from "./index"
-import { getLookups } from "./lookups"
+import type { DashboardJob } from "./types"
 
 /**
  * Estimates dashboard data. Uses /estimates-snapshot (the LOCKED / authorised
@@ -34,7 +34,10 @@ export interface EstimatesData {
   generatedAt: string
   error?: string
   estimates: EstimateRow[]
-  // Distinct values for the filter dropdowns.
+  /** Which page this payload is, and how many there are (progressive loading). */
+  page: number
+  totalPages: number
+  // Distinct values for the filter dropdowns (from this page's rows).
   estimators: string[]
   statuses: string[]
   types: string[]
@@ -59,80 +62,81 @@ const iso = (v: unknown): string | null => {
   return Number.isNaN(d.getTime()) ? null : d.toISOString()
 }
 
-const PER_PAGE = 500
+// The PrimeEco estimate endpoints are slow (and slower under concurrency), so we
+// load ONE small page per request and the client streams the pages in. Each
+// request stays well under the 10s serverless limit. Only AUTHORISED estimates
+// (estimateType "Authorised Works", not Rejected) are kept.
+const PER_PAGE = 100
+const AUTHORISED_TYPES = new Set(["Authorised Works"])
 
-async function fetchSnapshot(): Promise<Envelope["data"]> {
-  // Page 1 first (to learn the page count), then fetch the rest IN PARALLEL so
-  // total time ≈ one request — keeps us well within the 10s serverless limit.
-  const first = await apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: 1, per_page: PER_PAGE } })
-  const rows: NonNullable<Envelope["data"]> = [...(first.data ?? [])]
-  const totalPages = Math.min(12, first.meta?.pagination?.total_pages ?? 1)
+/** Fetch one raw page of /estimates (cached per page id). */
+const getCachedPage = unstable_cache(
+  async (page: number) => apiFetch<Envelope>("/estimates", { searchParams: { page, per_page: PER_PAGE } }),
+  ["primeeco-estimates-page-v1"],
+  { revalidate: 1800, tags: ["primeeco-estimates"] },
+)
 
-  if (totalPages > 1) {
-    const results = await Promise.allSettled(
-      Array.from({ length: totalPages - 1 }, (_, k) =>
-        apiFetch<Envelope>("/estimates-snapshot", { searchParams: { page: k + 2, per_page: PER_PAGE } }),
-      ),
-    )
-    for (const r of results) if (r.status === "fulfilled") rows.push(...(r.value.data ?? []))
-  }
-  return rows
+/** Resolve to a value within `ms`, or the fallback if it takes too long. */
+function withTimeout<T>(p: Promise<T>, ms: number, fallback: T): Promise<T> {
+  return Promise.race([p, new Promise<T>((res) => setTimeout(() => res(fallback), ms))])
 }
 
-const getCachedSnapshot = unstable_cache(fetchSnapshot, ["primeeco-estimates-snapshot-v1"], {
-  revalidate: 1800,
-  tags: ["primeeco-estimates"],
-})
-
-export async function getEstimatesData(): Promise<EstimatesData> {
-  // Fetch estimates and job data concurrently; a slow/failed job fetch only
-  // affects the job-number/client/division enrichment, not the estimate totals.
-  const [dashRes, snapRes, lookRes] = await Promise.allSettled([getDashboardData(), getCachedSnapshot(), getLookups()])
-
-  const dash = dashRes.status === "fulfilled" ? dashRes.value : null
-  const jobById = new Map((dash?.jobs ?? []).map((j) => [j.id, j]))
-  const live = dash?.live ?? false
-  const allDivisions = lookRes.status === "fulfilled" ? [...lookRes.value.divisionName.values()].sort() : []
-
-  let raw: Envelope["data"] = []
-  let error: string | undefined
-  if (snapRes.status === "fulfilled") {
-    raw = snapRes.value
-  } else {
-    error = snapRes.reason instanceof Error ? snapRes.reason.message : "Failed to load estimates"
+function normalize(e: NonNullable<Envelope["data"]>[number], jobById: Map<string, DashboardJob>): EstimateRow {
+  const a = e.attributes ?? {}
+  const jobId = str(a.jobId) ?? ""
+  const job = jobById.get(jobId)
+  return {
+    id: e.id ?? crypto.randomUUID(),
+    jobId,
+    jobNumber: job?.jobNumber ?? "—",
+    label: str(a.label) ?? "",
+    estimator: str(a.createdBy) ?? "Unknown",
+    status: str(a.estimateStatus) ?? "Unknown",
+    type: str(a.estimateType) ?? "—",
+    valueExGst: num(a.totalIncludingTax) / 1.1, // /estimates is tax-inclusive; ex-GST = ÷1.1
+    client: job?.client ?? "Unknown",
+    division: job?.division ?? "—",
+    region: job?.region ?? null,
+    createdAt: iso(a.createdAt),
   }
+}
 
-  const estimates: EstimateRow[] = (raw ?? []).map((e) => {
-    const a = e.attributes ?? {}
-    const jobId = str(a.jobId) ?? ""
-    const job = jobById.get(jobId)
-    return {
-      id: e.id ?? crypto.randomUUID(),
-      jobId,
-      jobNumber: job?.jobNumber ?? "—",
-      label: str(a.label) ?? "",
-      estimator: str(a.createdBy) ?? "Unknown",
-      status: str(a.estimateStatus) ?? "Unknown",
-      type: str(a.estimateType) ?? "—",
-      valueExGst: num(a.authorisedTotalExcludingTax),
-      client: job?.client ?? "Unknown",
-      division: job?.division ?? "—",
-      region: job?.region ?? null,
-      createdAt: iso(a.createdAt),
-    }
-  })
+const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
 
-  const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
+/** One page of authorised estimates. The client fetches pages 1..totalPages. */
+export async function getEstimatesData(page = 1): Promise<EstimatesData> {
+  // Job join comes from the cached dashboard; cap it so a cold job cache never
+  // blocks the estimate totals (they still load, just without job/client detail).
+  const jobsP = withTimeout(
+    getDashboardData().then((d) => d.jobs).catch(() => [] as DashboardJob[]),
+    3500,
+    [] as DashboardJob[],
+  )
+  const pageP = getCachedPage(page)
+    .then((env) => ({ env, error: undefined as string | undefined }))
+    .catch((e) => ({ env: { data: [] } as Envelope, error: e instanceof Error ? e.message : "Failed to load estimates" }))
+
+  const [jobs, { env, error }] = await Promise.all([jobsP, pageP])
+  const jobById = new Map(jobs.map((j) => [j.id, j]))
+  const totalPages = Math.min(10, env.meta?.pagination?.total_pages ?? 1)
+  // Live = the estimates endpoint responded (independent of the job cache).
+  const live = !error
+
+  const estimates = (env.data ?? [])
+    .map((e) => normalize(e, jobById))
+    .filter((e) => AUTHORISED_TYPES.has(e.type) && e.status !== "Rejected")
 
   return {
     live,
     generatedAt: new Date().toISOString(),
-    error: error ?? (estimates.length === 0 && !live ? "Not live — add credentials or check API" : undefined),
+    error: error ?? (estimates.length === 0 && page === 1 && !live ? "Not live — add credentials or check API" : undefined),
+    page,
+    totalPages,
     estimates,
     estimators: uniq(estimates.map((e) => e.estimator)),
     statuses: uniq(estimates.map((e) => e.status)),
     types: uniq(estimates.map((e) => e.type)),
-    divisions: allDivisions.length ? allDivisions : uniq(estimates.map((e) => e.division)),
+    divisions: uniq(estimates.map((e) => e.division)),
     clients: uniq(estimates.map((e) => e.client)),
   }
 }

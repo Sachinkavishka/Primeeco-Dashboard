@@ -21,24 +21,83 @@ interface Filters {
 const EMPTY: Filters = { estimator: "", status: "", type: "", division: "", client: "" }
 
 export function EstimatesView({ initial }: { initial: EstimatesData }) {
-  const [data, setData] = useState(initial)
+  const [estimates, setEstimates] = useState<EstimateRow[]>(initial.estimates)
+  const [meta, setMeta] = useState({
+    live: initial.live,
+    generatedAt: initial.generatedAt,
+    error: initial.error,
+    totalPages: initial.totalPages,
+    loaded: 1,
+  })
   const [f, setF] = useState<Filters>(EMPTY)
 
+  // Progressive loading: page 1 is `initial`; stream in the rest, and refresh
+  // all pages periodically. Each request is one small (fast) page.
   useEffect(() => {
-    const id = setInterval(async () => {
-      try {
-        const res = await fetch("/api/estimates", { cache: "no-store" })
-        if (res.ok) setData((await res.json()) as EstimatesData)
-      } catch {
-        /* keep last good */
+    let cancelled = false
+
+    const appendRest = async () => {
+      const acc = [...initial.estimates]
+      let total = initial.totalPages
+      for (let p = 2; p <= total; p++) {
+        try {
+          const res = await fetch(`/api/estimates?page=${p}`, { cache: "no-store" })
+          if (!res.ok) break
+          const d = (await res.json()) as EstimatesData
+          if (cancelled) return
+          acc.push(...d.estimates)
+          total = d.totalPages
+          setEstimates([...acc])
+          setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, totalPages: total, loaded: p }))
+        } catch {
+          break
+        }
       }
-    }, REFRESH_MS)
-    return () => clearInterval(id)
-  }, [])
+    }
+
+    const fullReload = async () => {
+      const acc: EstimateRow[] = []
+      let p = 1
+      let total = 1
+      do {
+        try {
+          const res = await fetch(`/api/estimates?page=${p}`, { cache: "no-store" })
+          if (!res.ok) break
+          const d = (await res.json()) as EstimatesData
+          if (cancelled) return
+          acc.push(...d.estimates)
+          total = d.totalPages
+          setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, totalPages: total, loaded: p }))
+          p++
+        } catch {
+          break
+        }
+      } while (p <= total)
+      if (!cancelled) setEstimates(acc)
+    }
+
+    if (initial.totalPages > 1) appendRest()
+    const id = setInterval(fullReload, REFRESH_MS)
+    return () => {
+      cancelled = true
+      clearInterval(id)
+    }
+  }, [initial])
+
+  const options = useMemo(() => {
+    const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
+    return {
+      estimators: uniq(estimates.map((e) => e.estimator)),
+      statuses: uniq(estimates.map((e) => e.status)),
+      types: uniq(estimates.map((e) => e.type)),
+      divisions: uniq(estimates.map((e) => e.division)),
+      clients: uniq(estimates.map((e) => e.client)),
+    }
+  }, [estimates])
 
   const rows = useMemo(
     () =>
-      data.estimates.filter(
+      estimates.filter(
         (e) =>
           (!f.estimator || e.estimator === f.estimator) &&
           (!f.status || e.status === f.status) &&
@@ -46,9 +105,10 @@ export function EstimatesView({ initial }: { initial: EstimatesData }) {
           (!f.division || e.division === f.division) &&
           (!f.client || e.client === f.client),
       ),
-    [data.estimates, f],
+    [estimates, f],
   )
 
+  const loadingMore = meta.loaded < meta.totalPages
   const totalValue = rows.reduce((a, e) => a + e.valueExGst, 0)
   const byEstimator = groupBy(rows, (e) => e.estimator)
   const byClient = groupBy(rows, (e) => e.client)
@@ -68,32 +128,36 @@ export function EstimatesView({ initial }: { initial: EstimatesData }) {
           <NavTabs />
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
-              data.live ? "bg-emerald-300/25 text-white" : "bg-amber-300/25 text-white"
+              meta.live ? "bg-emerald-300/25 text-white" : "bg-amber-300/25 text-white"
             }`}
           >
-            <span className={`h-2 w-2 rounded-full ${data.live ? "bg-emerald-200 animate-pulse" : "bg-amber-200"}`} />
-            {data.live ? "LIVE" : "SAMPLE"}
+            <span className={`h-2 w-2 rounded-full ${meta.live ? "bg-emerald-200 animate-pulse" : "bg-amber-200"}`} />
+            {meta.live ? "LIVE" : "SAMPLE"}
           </span>
-          <span className="text-sm">{fmtTime(data.generatedAt)}</span>
+          <span className="text-sm">{fmtTime(meta.generatedAt)}</span>
         </div>
       </header>
 
-      {(data.error || data.estimates.length === 0) && (
+      {loadingMore && (
+        <div className="mb-5 flex items-center gap-2 rounded-2xl border border-violet-200 bg-violet-50 px-4 py-3 text-sm text-violet-800">
+          <span className="h-3 w-3 animate-spin rounded-full border-2 border-violet-400 border-t-transparent" />
+          Loading estimates… page {meta.loaded} of {meta.totalPages} · {estimates.length} so far
+        </div>
+      )}
+      {!loadingMore && (meta.error || estimates.length === 0) && (
         <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          {data.estimates.length === 0
-            ? "No estimates loaded yet"
-            : `${data.estimates.length} estimates loaded`}
-          {data.error ? ` — ${data.error}` : ". If this persists, reload in a moment (the data refreshes periodically)."}
+          {estimates.length === 0 ? "No authorised estimates loaded" : `${estimates.length} estimates loaded`}
+          {meta.error ? ` — ${meta.error}` : ". Reload in a moment if this persists."}
         </div>
       )}
 
       {/* Filters */}
       <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <Select label="Estimator" value={f.estimator} options={data.estimators} onChange={(v) => set({ estimator: v })} />
-        <Select label="Status" value={f.status} options={data.statuses} onChange={(v) => set({ status: v })} />
-        <Select label="Type" value={f.type} options={data.types} onChange={(v) => set({ type: v })} />
-        <Select label="Division" value={f.division} options={data.divisions} onChange={(v) => set({ division: v })} />
-        <Select label="Client" value={f.client} options={data.clients} onChange={(v) => set({ client: v })} />
+        <Select label="Estimator" value={f.estimator} options={options.estimators} onChange={(v) => set({ estimator: v })} />
+        <Select label="Status" value={f.status} options={options.statuses} onChange={(v) => set({ status: v })} />
+        <Select label="Type" value={f.type} options={options.types} onChange={(v) => set({ type: v })} />
+        <Select label="Division" value={f.division} options={options.divisions} onChange={(v) => set({ division: v })} />
+        <Select label="Client" value={f.client} options={options.clients} onChange={(v) => set({ client: v })} />
         <button
           onClick={() => setF(EMPTY)}
           className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50"
