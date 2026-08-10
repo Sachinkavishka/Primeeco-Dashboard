@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useMemo, useState } from "react"
-import { ClipboardList, DollarSign, Layers, Users } from "lucide-react"
+import { ClipboardList, Clock, DollarSign, FolderOpen, Layers, Receipt, TrendingUp, Users } from "lucide-react"
 import type { EstimatesData, EstimateRow, EstimateState } from "@/lib/primeeco/estimates"
 import { fmtDate, fmtMoney, fmtMoneyCompact, fmtNumber, fmtTime } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
@@ -78,21 +78,42 @@ export function EstimatesView() {
     }
   }, [])
 
-  // Enrich estimates with job number / client / division from the ops job cache
-  // (fetched separately so the slow job load never blocks estimates).
-  const [jobMap, setJobMap] = useState<Map<string, { jobNumber: string; client: string | null; division: string | null; region: string | null }>>(new Map())
+  // Enrich estimates with job number / client / division / open-closed status
+  // from the ops job cache (fetched separately so the slow job load never
+  // blocks estimates).
+  type JobInfo = { jobNumber: string; client: string | null; division: string | null; region: string | null; statusType: string | null }
+  const [jobMap, setJobMap] = useState<Map<string, JobInfo>>(new Map())
   useEffect(() => {
     let cancelled = false
     ;(async () => {
       try {
         const res = await fetch("/api/dashboard", { cache: "no-store" })
         if (!res.ok) return
-        const dash = (await res.json()) as {
-          jobs: { id: string; jobNumber: string; client: string | null; division: string | null; region: string | null }[]
-        }
+        const dash = (await res.json()) as { jobs: ({ id: string } & JobInfo)[] }
         if (!cancelled) setJobMap(new Map(dash.jobs.map((j) => [j.id, j])))
       } catch {
         /* ignore — estimator totals still work without job detail */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  // Which jobs already have an AR invoice — powers the invoiced vs to-be-invoiced
+  // split. Fetched from the same finance-gated API the /receivables page uses;
+  // failures just leave every authorised estimate counted as "to invoice".
+  const [invoicedJobIds, setInvoicedJobIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/receivables", { cache: "no-store" })
+        if (!res.ok) return
+        const data = (await res.json()) as { invoices: { jobId: string }[] }
+        if (!cancelled) setInvoicedJobIds(new Set(data.invoices.map((i) => i.jobId).filter(Boolean)))
+      } catch {
+        /* ignore — invoicing split degrades to "all to invoice" */
       }
     })()
     return () => {
@@ -142,6 +163,31 @@ export function EstimatesView() {
     for (const e of deduped) if (e.state) c[e.state]++
     return c
   }, [deduped])
+
+  // Pipeline metrics span BOTH states (pending → approval, authorised →
+  // invoicing), so they read the deduped set directly — respecting the business
+  // filters (estimator/division/client) but NOT the state tab / status / type.
+  const pipeline = useMemo(() => {
+    const base = deduped.filter(
+      (e) =>
+        (!f.estimator || e.estimator === f.estimator) &&
+        (!f.division || e.division === f.division) &&
+        (!f.client || e.client === f.client),
+    )
+    const jobs = (list: EstimateRow[]) => new Set(list.map((e) => e.jobId).filter(Boolean)).size
+    const value = (list: EstimateRow[]) => list.reduce((a, e) => a + e.valueExGst, 0)
+    const stat = (list: EstimateRow[]) => ({ jobs: jobs(list), value: value(list), count: list.length })
+
+    const openJob = base.filter((e) => jobMap.get(e.jobId)?.statusType === "Open")
+    const authorised = base.filter((e) => e.state === "authorised")
+    return {
+      hasInvoiceData: invoicedJobIds.size > 0,
+      openJob: stat(openJob),
+      pending: stat(base.filter((e) => e.state === "pending")),
+      invoiced: stat(authorised.filter((e) => invoicedJobIds.has(e.jobId))),
+      toInvoice: stat(authorised.filter((e) => !invoicedJobIds.has(e.jobId))),
+    }
+  }, [deduped, jobMap, invoicedJobIds, f.estimator, f.division, f.client])
 
   const rows = useMemo(
     () =>
@@ -242,6 +288,60 @@ export function EstimatesView() {
         <Kpi label="Estimates" value={fmtNumber(rows.length)} icon={ClipboardList} tint="text-blue-600 bg-blue-100" />
         <Kpi label="Estimators" value={fmtNumber(byEstimator.length)} icon={Users} tint="text-violet-600 bg-violet-100" />
         <Kpi label="Avg / Estimate" value={fmtMoneyCompact(rows.length ? totalValue / rows.length : 0)} icon={Layers} tint="text-amber-600 bg-amber-100" />
+      </div>
+
+      {/* Pipeline: estimate → approval → invoicing */}
+      <div className="mt-5">
+        <Panel
+          title="Pipeline"
+          subtitle="estimate → approval → invoicing · distinct jobs · ex-GST · respects estimator / division / client filters"
+        >
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <PipelineCard
+              label="Estimates on open jobs"
+              value={fmtMoneyCompact(pipeline.openJob.value)}
+              jobs={pipeline.openJob.jobs}
+              note={`${fmtNumber(pipeline.openJob.count)} estimates`}
+              icon={FolderOpen}
+              accent="sky"
+            />
+            <PipelineCard
+              label="Awaiting approval"
+              badge="Lock + Pending"
+              value={fmtMoneyCompact(pipeline.pending.value)}
+              jobs={pipeline.pending.jobs}
+              note="jobs to approve (future)"
+              icon={Clock}
+              accent="amber"
+              onClick={() => set({ state: "pending" })}
+            />
+            <PipelineCard
+              label="Authorised & invoiced"
+              badge="Lock + Authorised"
+              value={fmtMoneyCompact(pipeline.invoiced.value)}
+              jobs={pipeline.invoiced.jobs}
+              note={pipeline.hasInvoiceData ? "jobs invoiced" : "invoice data unavailable"}
+              icon={Receipt}
+              accent="emerald"
+              onClick={() => set({ state: "authorised" })}
+            />
+            <PipelineCard
+              label="Authorised, to invoice"
+              badge="Lock + Authorised"
+              value={fmtMoneyCompact(pipeline.toInvoice.value)}
+              jobs={pipeline.toInvoice.jobs}
+              note="future revenue to bill"
+              icon={TrendingUp}
+              accent="violet"
+              onClick={() => set({ state: "authorised" })}
+            />
+          </div>
+          {!pipeline.hasInvoiceData && (
+            <p className="mt-3 text-xs text-slate-400">
+              Invoiced / to-invoice split needs the receivables feed — everything authorised is shown as “to invoice” until it loads.
+            </p>
+          )}
+        </Panel>
       </div>
 
       {/* By estimator + by month */}
@@ -381,6 +481,55 @@ function Select({
         ))}
       </select>
     </label>
+  )
+}
+
+const ACCENTS = {
+  sky: { icon: "text-sky-600 bg-sky-100", jobs: "text-sky-700", ring: "hover:border-sky-300" },
+  amber: { icon: "text-amber-600 bg-amber-100", jobs: "text-amber-700", ring: "hover:border-amber-300" },
+  emerald: { icon: "text-emerald-600 bg-emerald-100", jobs: "text-emerald-700", ring: "hover:border-emerald-300" },
+  violet: { icon: "text-violet-600 bg-violet-100", jobs: "text-violet-700", ring: "hover:border-violet-300" },
+} as const
+
+function PipelineCard({
+  label,
+  badge,
+  value,
+  jobs,
+  note,
+  icon: Icon,
+  accent,
+  onClick,
+}: {
+  label: string
+  badge?: string
+  value: string
+  jobs: number
+  note: string
+  icon: typeof DollarSign
+  accent: keyof typeof ACCENTS
+  onClick?: () => void
+}) {
+  const a = ACCENTS[accent]
+  const Tag = onClick ? "button" : "div"
+  return (
+    <Tag
+      onClick={onClick}
+      className={`flex flex-col rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition-colors ${
+        onClick ? `cursor-pointer ${a.ring}` : ""
+      }`}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[12px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+        <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${a.icon}`}>
+          <Icon className="h-4 w-4" />
+        </span>
+      </div>
+      {badge && <span className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-slate-300">{badge}</span>}
+      <div className="mt-2 text-2xl font-extrabold tabular-nums text-slate-900">{value}</div>
+      <div className={`mt-1 text-sm font-bold tabular-nums ${a.jobs}`}>{fmtNumber(jobs)} jobs</div>
+      <div className="mt-0.5 text-xs text-slate-400">{note}</div>
+    </Tag>
   )
 }
 

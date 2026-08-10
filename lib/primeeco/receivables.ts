@@ -20,6 +20,8 @@ const EXCLUDED = new Set(["Draft", "Cancelled"])
 export interface ArRow {
   id: string
   invoiceNumber: string
+  /** PrimeEco job UUID — lets other pages join invoices to jobs/estimates. */
+  jobId: string
   jobNumber: string
   status: string
   paid: boolean
@@ -108,6 +110,7 @@ export async function getReceivablesData(): Promise<ReceivablesData> {
       return {
         id: e.id ?? crypto.randomUUID(),
         invoiceNumber: str(a.invoiceNumber) ?? "—",
+        jobId: str(a.jobId) ?? "",
         jobNumber: job?.jobNumber ?? "—",
         status,
         paid: status === "Paid",
