@@ -1,10 +1,10 @@
 import "server-only"
+import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
 import type { Shift } from "@/lib/connecteam/types"
 import { getEstimatesData } from "@/lib/primeeco/estimates"
-import type { EstimateRow } from "@/lib/primeeco/estimates"
 import { getMockApprovals } from "./mock"
-import type { ApprovedJob, DayColumn, SchedulingData, TechAvailability, TypeBucket } from "./types"
+import type { ApprovalSource, ApprovedJob, DayColumn, SchedulingData, TechAvailability, TypeBucket } from "./types"
 
 /**
  * Scheduling facade. Joins two systems for the coordinator view:
@@ -21,6 +21,18 @@ const RECENT_DAYS = 7
 
 /** Our "approved" signal: authorised estimates only. */
 const APPROVED_STATUS = /authoris|approved/i
+
+/**
+ * Job $ values are financial data (management-only, per the finance-tab rule),
+ * so we only expose them when the management passcode is unlocked — same
+ * httpOnly `dfm_fin` cookie the finance pages gate on. When locked, values are
+ * stripped server-side and never reach the coordinator's browser.
+ */
+async function financeUnlocked(): Promise<boolean> {
+  const store = await cookies()
+  const passcode = process.env.FINANCE_PASSCODE || "detail"
+  return store.get("dfm_fin")?.value === passcode
+}
 
 function startOfToday(): number {
   const d = new Date()
@@ -41,7 +53,7 @@ function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
   return hay.includes(num)
 }
 
-function toApprovedJob(e: EstimateRow, shifts: Shift[]): ApprovedJob {
+function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
   const matches = e.jobNumber && e.jobNumber !== "—" ? shifts.filter((s) => shiftMatchesJob(s, e.jobNumber)) : []
   const firstShift = matches
     .map((s) => s.start)
@@ -136,7 +148,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   // When PrimeEco isn't configured, populate the SAMPLE board with mock
   // approvals so the join demonstrates (matches Operations' mock behaviour).
   const usingMockApprovals = !est.live && est.estimates.length === 0
-  const estimateRows = usingMockApprovals ? getMockApprovals() : est.estimates
+  const estimateRows: ApprovalSource[] = usingMockApprovals ? getMockApprovals() : est.estimates
 
   // Approvals: authorised estimates within the recent window, newest first.
   const approvals: ApprovedJob[] = estimateRows
@@ -157,11 +169,16 @@ export async function getSchedulingData(): Promise<SchedulingData> {
 
   const availability = buildAvailability(shifts, roster.users)
 
+  // Gate financial figures: strip $ values unless management is unlocked.
+  const showValues = await financeUnlocked()
+  const mask = (a: ApprovedJob): ApprovedJob => (showValues ? a : { ...a, valueExGst: 0 })
+
   return {
     live: est.live && roster.live,
     primeecoLive: est.live,
     connecteamLive: roster.live,
     generatedAt: new Date().toISOString(),
+    showValues,
     // Don't surface the PrimeEco "not configured" error on the sample board.
     error: (usingMockApprovals ? undefined : est.error) || roster.error,
     counts: {
@@ -172,8 +189,8 @@ export async function getSchedulingData(): Promise<SchedulingData> {
       openShifts: openShifts.length,
       techsOnToday: availability.filter((t) => t.todayShifts > 0).length,
     },
-    approvals,
-    needsScheduling,
+    approvals: approvals.map(mask),
+    needsScheduling: needsScheduling.map(mask),
     week: buildWeek(shifts),
     typeBreakdown: buildTypeBreakdown(shifts),
     availability,

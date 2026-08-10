@@ -1,5 +1,22 @@
 import type { Shift } from "@/lib/connecteam/types"
 
+/**
+ * The subset of a PrimeEco estimate row the scheduling board actually needs.
+ * Kept as a standalone shape (not `EstimateRow`) so ongoing changes to the
+ * estimates module's interface can't break the scheduling build — the real
+ * `EstimateRow` is a structural superset and assigns cleanly to this.
+ */
+export interface ApprovalSource {
+  jobId: string
+  jobNumber: string
+  client: string
+  division: string
+  estimator: string
+  valueExGst: number
+  status: string
+  createdAt: string | null
+}
+
 /** An approved job (authorised estimate) with its scheduling state. */
 export interface ApprovedJob {
   jobId: string
@@ -51,6 +68,8 @@ export interface SchedulingData {
   primeecoLive: boolean
   connecteamLive: boolean
   generatedAt: string
+  /** True when management is unlocked; when false, $ values are stripped. */
+  showValues: boolean
   error?: string
 
   counts: {

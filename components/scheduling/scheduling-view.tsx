@@ -101,7 +101,9 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  {data.showValues && (
+                    <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  )}
                   <div className="text-xs text-slate-400">{fmtDate(a.approvedAt)}</div>
                 </div>
               </li>
@@ -126,7 +128,9 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  {data.showValues && (
+                    <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  )}
                   <div className="text-xs text-slate-400">approved {fmtDate(a.approvedAt)}</div>
                 </div>
               </li>
