@@ -84,20 +84,51 @@ export function EstimatesView({ initial }: { initial: EstimatesData }) {
     }
   }, [initial])
 
+  // Enrich estimates with job number / client / division from the ops job cache
+  // (fetched separately so the slow job load never blocks estimates).
+  const [jobMap, setJobMap] = useState<Map<string, { jobNumber: string; client: string | null; division: string | null; region: string | null }>>(new Map())
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const res = await fetch("/api/dashboard", { cache: "no-store" })
+        if (!res.ok) return
+        const dash = (await res.json()) as {
+          jobs: { id: string; jobNumber: string; client: string | null; division: string | null; region: string | null }[]
+        }
+        if (!cancelled) setJobMap(new Map(dash.jobs.map((j) => [j.id, j])))
+      } catch {
+        /* ignore — estimator totals still work without job detail */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const enriched = useMemo(
+    () =>
+      estimates.map((e) => {
+        const j = jobMap.get(e.jobId)
+        return j ? { ...e, jobNumber: j.jobNumber, client: j.client ?? "Unknown", division: j.division ?? "—", region: j.region } : e
+      }),
+    [estimates, jobMap],
+  )
+
   const options = useMemo(() => {
     const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
     return {
-      estimators: uniq(estimates.map((e) => e.estimator)),
-      statuses: uniq(estimates.map((e) => e.status)),
-      types: uniq(estimates.map((e) => e.type)),
-      divisions: uniq(estimates.map((e) => e.division)),
-      clients: uniq(estimates.map((e) => e.client)),
+      estimators: uniq(enriched.map((e) => e.estimator)),
+      statuses: uniq(enriched.map((e) => e.status)),
+      types: uniq(enriched.map((e) => e.type)),
+      divisions: uniq(enriched.map((e) => e.division)),
+      clients: uniq(enriched.map((e) => e.client)),
     }
-  }, [estimates])
+  }, [enriched])
 
   const rows = useMemo(
     () =>
-      estimates.filter(
+      enriched.filter(
         (e) =>
           (!f.estimator || e.estimator === f.estimator) &&
           (!f.status || e.status === f.status) &&
@@ -105,7 +136,7 @@ export function EstimatesView({ initial }: { initial: EstimatesData }) {
           (!f.division || e.division === f.division) &&
           (!f.client || e.client === f.client),
       ),
-    [estimates, f],
+    [enriched, f],
   )
 
   const loadingMore = meta.loaded < meta.totalPages
