@@ -3,7 +3,9 @@ import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
 import type { Shift } from "@/lib/connecteam/types"
 import { getEstimatesData } from "@/lib/primeeco/estimates"
-import { getMockApprovals } from "./mock"
+import { getEstimateHours } from "@/lib/primeeco/estimate-hours"
+import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
+import { getMockApprovals, getMockHours } from "./mock"
 import type { ApprovalSource, ApprovedJob, DayColumn, SchedulingData, TechAvailability, TypeBucket } from "./types"
 
 /**
@@ -51,7 +53,7 @@ function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
   return hay.includes(num)
 }
 
-function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
+function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<string, JobEstimateHours>): ApprovedJob {
   // Connecteam shift.jobId IS the PrimeEco job UUID (systems are synced), so we
   // join exactly on it; the title-token heuristic is a fallback for sample data.
   const matches = shifts.filter(
@@ -73,6 +75,7 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
     approvedAt: e.createdAt,
     scheduled: matches.length > 0,
     firstShiftAt: firstShift ?? null,
+    estHours: hoursByJob[e.jobId] ?? null,
   }
 }
 
@@ -143,7 +146,7 @@ function buildAvailability(shifts: Shift[], users: { id: string; name: string }[
 }
 
 export async function getSchedulingData(): Promise<SchedulingData> {
-  const [est, roster] = await Promise.all([getEstimatesData(), getRoster()])
+  const [est, roster, hoursRes] = await Promise.all([getEstimatesData(), getRoster(), getEstimateHours()])
 
   const shifts = roster.shifts
   const today = startOfToday()
@@ -153,6 +156,9 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   // approvals so the join demonstrates (matches Operations' mock behaviour).
   const usingMockApprovals = !est.live && est.estimates.length === 0
   const estimateRows: ApprovalSource[] = usingMockApprovals ? getMockApprovals() : est.estimates
+  // Estimated labour hours per job — mock hours accompany mock approvals so the
+  // SAMPLE board demonstrates the feature end-to-end.
+  const hoursByJob = usingMockApprovals ? getMockHours() : hoursRes.byJob
 
   // Approvals: authorised estimates within the recent window, newest first.
   const approvals: ApprovedJob[] = estimateRows
@@ -161,7 +167,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
       if (!e.createdAt) return false
       return new Date(e.createdAt).getTime() >= windowStart
     })
-    .map((e) => toApprovedJob(e, shifts))
+    .map((e) => toApprovedJob(e, shifts, hoursByJob))
     .sort((a, b) => (b.approvedAt ?? "").localeCompare(a.approvedAt ?? ""))
 
   const recentCutoff = today - RECENT_DAYS * DAY_MS

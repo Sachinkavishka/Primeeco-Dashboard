@@ -1,3 +1,4 @@
+import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import type { ApprovalSource } from "./types"
 
 /**
@@ -32,4 +33,29 @@ export function getMockApprovals(): ApprovalSource[] {
     })
   }
   return rows
+}
+
+/** Sample estimated-hours per mock job (shapes mirror real aggregation). */
+export function getMockHours(): Record<string, JobEstimateHours> {
+  const out: Record<string, JobEstimateHours> = {}
+  for (let i = 0; i < 9; i++) {
+    const tech = 8 + ((i * 13) % 40)
+    const pm = i % 3 === 0 ? 3 : 0
+    const sup = i % 4 === 0 ? 4 : 0
+    const lab = i % 2 === 0 ? 6 : 0
+    const days = i % 3 === 2 ? 2 + (i % 5) : 0
+    out[`mock-job-${i}`] = {
+      jobId: `mock-job-${i}`,
+      byRole: {
+        Technician: { hours: tech, days: 0 },
+        ...(pm ? { "Project Manager": { hours: pm, days: 0 } } : {}),
+        ...(sup ? { Supervisor: { hours: sup, days: 0 } } : {}),
+        ...(lab ? { Labourer: { hours: lab, days: 0 } } : {}),
+        ...(days ? { Other: { hours: 0, days } } : {}),
+      },
+      totalHours: tech + pm + sup + lab,
+      totalDays: days,
+    }
+  }
+  return out
 }

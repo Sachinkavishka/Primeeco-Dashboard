@@ -10,8 +10,9 @@ import {
   UserCheck,
   Users,
 } from "lucide-react"
-import type { SchedulingData } from "@/lib/scheduling/types"
+import type { ApprovedJob, SchedulingData } from "@/lib/scheduling/types"
 import type { Shift } from "@/lib/connecteam/types"
+import type { HoursRole, JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { fmtDate, fmtMoneyCompact, fmtNumber } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
 import { NavTabs } from "@/components/nav-tabs"
@@ -99,6 +100,7 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
                   <div className="truncate text-xs text-slate-500">
                     {a.client} · {a.division}
                   </div>
+                  <HoursChips est={a.estHours} />
                 </div>
                 <div className="shrink-0 text-right">
                   {data.showValues && (
@@ -126,6 +128,7 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
                   <div className="truncate text-xs text-slate-500">
                     {a.client} · {a.division} · {a.estimator}
                   </div>
+                  <HoursChips est={a.estHours} />
                 </div>
                 <div className="shrink-0 text-right">
                   {data.showValues && (
@@ -242,9 +245,143 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
         </Panel>
       </div>
 
+      {/* Estimated labour per approved job — the week-planning table */}
+      <div className="mt-5">
+        <Panel
+          title="Estimated Labour — Recently Approved"
+          subtitle="from authorised estimate line items · hours and days reported separately"
+        >
+          <EstimatedLabourTable approvals={data.approvals} />
+        </Panel>
+      </div>
+
       <p className="mt-6 text-center text-xs text-slate-400">
         Approvals: PrimeEco authorised estimates · Roster: Connecteam scheduler (drafts included). Refreshes every 5 min.
       </p>
+    </div>
+  )
+}
+
+/* ---- estimated labour ---- */
+
+const ROLE_ORDER: HoursRole[] = ["Technician", "Project Manager", "Supervisor", "Labourer", "Other"]
+const ROLE_SHORT: Record<HoursRole, string> = {
+  Technician: "Tech",
+  "Project Manager": "PM",
+  Supervisor: "Sup",
+  Labourer: "Lab",
+  Other: "Other",
+}
+
+const fmtH = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
+
+/** Compact per-role hour chips shown on an approved-job row. */
+function HoursChips({ est }: { est: JobEstimateHours | null }) {
+  if (!est) return null
+  const parts: string[] = []
+  for (const role of ROLE_ORDER) {
+    const t = est.byRole[role]
+    if (!t) continue
+    if (t.hours > 0) parts.push(`${ROLE_SHORT[role]} ${fmtH(t.hours)}h`)
+    if (t.days > 0) parts.push(`${ROLE_SHORT[role]} ${fmtH(t.days)}d`)
+  }
+  if (parts.length === 0) return null
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {parts.map((p) => (
+        <span key={p} className="inline-flex rounded-md bg-sky-50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-700">
+          {p}
+        </span>
+      ))}
+    </div>
+  )
+}
+
+/** Week-planning table: estimated labour per approved job, by role. */
+function EstimatedLabourTable({ approvals }: { approvals: ApprovedJob[] }) {
+  const rows = approvals.filter((a) => a.estHours && (a.estHours.totalHours > 0 || a.estHours.totalDays > 0))
+  if (rows.length === 0) {
+    return <p className="text-sm text-slate-400">No labour lines found on recent authorised estimates.</p>
+  }
+  const totals: Record<HoursRole, { hours: number; days: number }> = {
+    Technician: { hours: 0, days: 0 },
+    "Project Manager": { hours: 0, days: 0 },
+    Supervisor: { hours: 0, days: 0 },
+    Labourer: { hours: 0, days: 0 },
+    Other: { hours: 0, days: 0 },
+  }
+  for (const a of rows) {
+    for (const role of ROLE_ORDER) {
+      const t = a.estHours!.byRole[role]
+      if (!t) continue
+      totals[role].hours += t.hours
+      totals[role].days += t.days
+    }
+  }
+  const cell = (t?: { hours: number; days: number }) => {
+    if (!t || (t.hours === 0 && t.days === 0)) return <span className="text-slate-300">—</span>
+    return (
+      <>
+        {t.hours > 0 && <span>{fmtH(t.hours)}h</span>}
+        {t.hours > 0 && t.days > 0 && <span className="text-slate-300"> · </span>}
+        {t.days > 0 && <span className="text-amber-700">{fmtH(t.days)}d</span>}
+      </>
+    )
+  }
+  return (
+    <div className="max-h-[420px] overflow-auto">
+      <table className="w-full text-sm">
+        <thead className="sticky top-0 bg-white">
+          <tr className="border-b border-slate-100 text-left text-xs uppercase tracking-wide text-slate-400">
+            <th className="py-2 pr-4 font-semibold">Job #</th>
+            <th className="py-2 pr-4 font-semibold">Client</th>
+            <th className="py-2 pr-4 font-semibold">Scheduled</th>
+            {ROLE_ORDER.map((r) => (
+              <th key={r} className="py-2 pr-4 text-right font-semibold">
+                {ROLE_SHORT[r]}
+              </th>
+            ))}
+            <th className="py-2 text-right font-semibold">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((a) => (
+            <tr key={a.jobId} className="border-b border-slate-50 hover:bg-slate-50/60">
+              <td className="whitespace-nowrap py-2 pr-4 font-semibold text-slate-900">{a.jobNumber}</td>
+              <td className="max-w-[180px] truncate py-2 pr-4 text-slate-600">{a.client}</td>
+              <td className="whitespace-nowrap py-2 pr-4">
+                {a.scheduled ? <Chip tone="emerald">{a.firstShiftAt ? fmtDate(a.firstShiftAt) : "yes"}</Chip> : <Chip tone="rose">not yet</Chip>}
+              </td>
+              {ROLE_ORDER.map((r) => (
+                <td key={r} className="whitespace-nowrap py-2 pr-4 text-right tabular-nums text-slate-700">
+                  {cell(a.estHours!.byRole[r])}
+                </td>
+              ))}
+              <td className="whitespace-nowrap py-2 text-right font-bold tabular-nums text-slate-900">
+                {cell({ hours: a.estHours!.totalHours, days: a.estHours!.totalDays })}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="border-t border-slate-200 text-sm font-bold text-slate-900">
+            <td className="py-2 pr-4" colSpan={3}>
+              Total ({rows.length} jobs)
+            </td>
+            {ROLE_ORDER.map((r) => (
+              <td key={r} className="whitespace-nowrap py-2 pr-4 text-right tabular-nums">
+                {cell(totals[r])}
+              </td>
+            ))}
+            <td className="whitespace-nowrap py-2 text-right tabular-nums">
+              {cell({
+                hours: ROLE_ORDER.reduce((s, r) => s + totals[r].hours, 0),
+                days: ROLE_ORDER.reduce((s, r) => s + totals[r].days, 0),
+              })}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
     </div>
   )
 }

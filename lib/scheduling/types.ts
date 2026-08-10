@@ -1,4 +1,5 @@
 import type { Shift } from "@/lib/connecteam/types"
+import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 
 /**
  * The subset of a PrimeEco estimate row the scheduling board actually needs.
@@ -31,6 +32,12 @@ export interface ApprovedJob {
   scheduled: boolean
   /** Start day of the first matching shift, if scheduled. */
   firstShiftAt: string | null
+  /**
+   * Estimated labour time from the authorised estimate's line items, broken
+   * out by role (Technician / PM / Supervisor / Labourer / Other), hours and
+   * days reported separately. Null when no labour lines were found.
+   */
+  estHours: JobEstimateHours | null
 }
 
 /** One appointment-type row: how many upcoming, split draft vs confirmed. */
