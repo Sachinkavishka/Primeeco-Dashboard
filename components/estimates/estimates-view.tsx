@@ -115,8 +115,9 @@ export function EstimatesView() {
   const deduped = useMemo(() => {
     const latest = new Map<string, EstimateRow>()
     for (const e of enriched) {
-      const prev = latest.get(e.estimateKey)
-      if (!prev || e.version > prev.version) latest.set(e.estimateKey, e)
+      const key = e.estimateKey ?? e.id
+      const prev = latest.get(key)
+      if (!prev || (e.version ?? 0) > (prev.version ?? 0)) latest.set(key, e)
     }
     return [...latest.values()]
   }, [enriched])
@@ -138,7 +139,7 @@ export function EstimatesView() {
   // Counts per state tab (deduped), for the tab badges.
   const stateCounts = useMemo(() => {
     const c = { authorised: 0, pending: 0, rejected: 0, all: deduped.length }
-    for (const e of deduped) c[e.state]++
+    for (const e of deduped) if (e.state) c[e.state]++
     return c
   }, [deduped])
 

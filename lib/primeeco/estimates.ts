@@ -33,18 +33,21 @@ export interface EstimateRow {
   label: string
   estimator: string
   status: string
-  /** Coarse bucket: authorised / pending / rejected (derived from status). */
-  state: EstimateState
   type: string
   valueExGst: number
   client: string
   division: string
   region: string | null
   createdAt: string | null
+  // NOTE: the fields below are OPTIONAL only because the scheduling module
+  // reuses EstimateRow to build mock rows and predates them. getEstimatesData /
+  // normalize() ALWAYS populate them, so the estimates page can rely on them.
+  /** Coarse bucket: authorised / pending / rejected (derived from status). */
+  state?: EstimateState
   /** Identifies the underlying estimate so versions can be de-duplicated. */
-  estimateKey: string
+  estimateKey?: string
   /** Higher = newer version; used to keep the latest snapshot per estimate. */
-  version: number
+  version?: number
 }
 
 export interface EstimatesData {
