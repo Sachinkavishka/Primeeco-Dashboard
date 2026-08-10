@@ -17,7 +17,7 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 // cached date no longer matches) or when the user hits Refresh.
 // v3: bumped when the pending-value fix landed so cached $0 rows get refetched.
 const CK_EST = "dfm-est-snapshot-v3"
-const CK_JOBS = "dfm-est-jobs-v2"
+const CK_JOBS = "dfm-est-jobs-v3" // v3: added the job's assigned estimator
 const CK_INV = "dfm-est-invoiced-v2"
 const CACHE_ROLLOVER_MS = 3_600_000 // re-check once an hour for the date rolling over (always-on displays)
 
@@ -47,13 +47,14 @@ function writeDayCache(key: string, value: object) {
 interface Filters {
   state: "" | EstimateState
   estimator: string
+  jobEstimator: string
   status: string
   type: string
   division: string
   client: string
 }
 // Default to Authorised — the accurate "won work" (locked + authorised) figure.
-const EMPTY: Filters = { state: "authorised", estimator: "", status: "", type: "", division: "", client: "" }
+const EMPTY: Filters = { state: "authorised", estimator: "", jobEstimator: "", status: "", type: "", division: "", client: "" }
 
 const STATE_TABS: { value: "" | EstimateState; label: string }[] = [
   { value: "authorised", label: "Lock + Authorised" },
@@ -125,8 +126,16 @@ export function EstimatesView() {
   }, [refreshTick])
 
   // Enrich estimates with job number / client / division / open-closed status
+  // and the JOB's assigned estimator (may differ from the estimate's creator)
   // from the ops job cache (day-cached alongside the estimates).
-  type JobInfo = { jobNumber: string; client: string | null; division: string | null; region: string | null; statusType: string | null }
+  type JobInfo = {
+    jobNumber: string
+    client: string | null
+    division: string | null
+    region: string | null
+    statusType: string | null
+    estimator: string | null
+  }
   const [jobMap, setJobMap] = useState<Map<string, JobInfo>>(new Map())
   useEffect(() => {
     let cancelled = false
@@ -143,7 +152,14 @@ export function EstimatesView() {
         if (cancelled) return
         const entries: [string, JobInfo][] = dash.jobs.map((j) => [
           j.id,
-          { jobNumber: j.jobNumber, client: j.client, division: j.division, region: j.region, statusType: j.statusType },
+          {
+            jobNumber: j.jobNumber,
+            client: j.client,
+            division: j.division,
+            region: j.region,
+            statusType: j.statusType,
+            estimator: j.estimator,
+          },
         ])
         setJobMap(new Map(entries))
         writeDayCache(CK_JOBS, { jobs: entries })
@@ -210,9 +226,18 @@ export function EstimatesView() {
 
   const enriched = useMemo(
     () =>
-      estimates.map((e) => {
+      estimates.map((e): EstimateRow & { jobEstimator: string } => {
         const j = jobMap.get(e.jobId)
-        return j ? { ...e, jobNumber: j.jobNumber, client: j.client ?? "Unknown", division: j.division ?? "—", region: j.region } : e
+        return j
+          ? {
+              ...e,
+              jobNumber: j.jobNumber,
+              client: j.client ?? "Unknown",
+              division: j.division ?? "—",
+              region: j.region,
+              jobEstimator: j.estimator ?? "Unassigned",
+            }
+          : { ...e, jobEstimator: "Unassigned" }
       }),
     [estimates, jobMap],
   )
@@ -221,7 +246,7 @@ export function EstimatesView() {
   // (one per saved version). Keep only the latest version of each estimate so
   // totals don't over-count. This runs across the FULL accumulated set.
   const deduped = useMemo(() => {
-    const latest = new Map<string, EstimateRow>()
+    const latest = new Map<string, EstimateRow & { jobEstimator: string }>()
     for (const e of enriched) {
       const key = e.estimateKey ?? e.id
       const prev = latest.get(key)
@@ -246,6 +271,7 @@ export function EstimatesView() {
     const scope = f.state ? openOnly.filter((e) => e.state === f.state) : openOnly
     return {
       estimators: uniq(scope.map((e) => e.estimator)),
+      jobEstimators: uniq(scope.map((e) => e.jobEstimator)),
       statuses: uniq(scope.map((e) => e.status)),
       types: uniq(scope.map((e) => e.type)),
       divisions: uniq(scope.map((e) => e.division)),
@@ -268,6 +294,7 @@ export function EstimatesView() {
     const base = openOnly.filter(
       (e) =>
         (!f.estimator || e.estimator === f.estimator) &&
+        (!f.jobEstimator || e.jobEstimator === f.jobEstimator) &&
         (!f.division || e.division === f.division) &&
         (!f.client || e.client === f.client),
     )
@@ -285,7 +312,7 @@ export function EstimatesView() {
       invoiced: stat(authorised.filter((e) => invoicedJobIds.has(e.jobId))),
       toInvoice: stat(authorised.filter((e) => !invoicedJobIds.has(e.jobId))),
     }
-  }, [openOnly, invoicedJobIds, f.estimator, f.division, f.client])
+  }, [openOnly, invoicedJobIds, f.estimator, f.jobEstimator, f.division, f.client])
 
   // Pipeline drill-down: which card's estimate list is open, if any.
   const [drill, setDrill] = useState<{ title: string; explain: string; rows: EstimateRow[] } | null>(null)
@@ -296,6 +323,7 @@ export function EstimatesView() {
         (e) =>
           (!f.state || e.state === f.state) &&
           (!f.estimator || e.estimator === f.estimator) &&
+          (!f.jobEstimator || e.jobEstimator === f.jobEstimator) &&
           (!f.status || e.status === f.status) &&
           (!f.type || e.type === f.type) &&
           (!f.division || e.division === f.division) &&
@@ -307,6 +335,7 @@ export function EstimatesView() {
   const loadingMore = meta.loaded < meta.totalPages
   const totalValue = rows.reduce((a, e) => a + e.valueExGst, 0)
   const byEstimator = groupBy(rows, (e) => e.estimator)
+  const byJobEstimator = groupBy(rows, (e) => e.jobEstimator)
   const byClient = groupBy(rows, (e) => e.client)
   const months = monthly(rows)
   const maxMonth = Math.max(1, ...months.map((m) => m.value))
@@ -383,7 +412,13 @@ export function EstimatesView() {
 
       {/* Filters */}
       <div className="mb-5 flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-        <Select label="Estimator" value={f.estimator} options={options.estimators} onChange={(v) => set({ estimator: v })} />
+        <Select label="Estimate Creator" value={f.estimator} options={options.estimators} onChange={(v) => set({ estimator: v })} />
+        <Select
+          label="Job Estimator"
+          value={f.jobEstimator}
+          options={options.jobEstimators}
+          onChange={(v) => set({ jobEstimator: v })}
+        />
         <Select label="Status" value={f.status} options={options.statuses} onChange={(v) => set({ status: v })} />
         <Select label="Type" value={f.type} options={options.types} onChange={(v) => set({ type: v })} />
         <Select label="Division" value={f.division} options={options.divisions} onChange={(v) => set({ division: v })} />
@@ -487,9 +522,13 @@ export function EstimatesView() {
         </Panel>
       </div>
 
-      {/* By estimator + by month */}
+      {/* By estimator (estimate creator) + by month */}
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-3">
-        <Panel title="By Estimator" subtitle="value estimated (ex-GST) · click to filter" className="lg:col-span-2">
+        <Panel
+          title="By Estimate Creator"
+          subtitle="who created each estimate · value ex-GST · click to filter"
+          className="lg:col-span-2"
+        >
           <BarList items={byEstimator} limit={12} color="#4a3aa7" onSelect={(name) => set({ estimator: name })} />
         </Panel>
         <Panel title="By Month" subtitle="last 12 months (ex-GST)">
@@ -510,8 +549,14 @@ export function EstimatesView() {
         </Panel>
       </div>
 
-      {/* By client */}
-      <div className="mt-5">
+      {/* By job estimator (whole job) + by client */}
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel
+          title="By Job Estimator"
+          subtitle="the estimator ASSIGNED to the job in PrimeEco · value ex-GST · click to filter"
+        >
+          <BarList items={byJobEstimator} limit={12} color="#b45309" onSelect={(name) => set({ jobEstimator: name })} />
+        </Panel>
         <Panel title="By Client" subtitle="value estimated (ex-GST) · click to filter">
           <BarList items={byClient} limit={10} color="#1baf7a" onSelect={(name) => set({ client: name })} />
         </Panel>
@@ -634,7 +679,7 @@ export function EstimatesView() {
 }
 
 /* helpers */
-function groupBy(rows: EstimateRow[], key: (e: EstimateRow) => string) {
+function groupBy<T extends { valueExGst: number }>(rows: T[], key: (e: T) => string) {
   const m = new Map<string, { count: number; value: number }>()
   for (const e of rows) {
     const k = key(e) || "Unknown"
