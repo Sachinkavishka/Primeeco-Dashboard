@@ -1,0 +1,321 @@
+"use client"
+
+import { useEffect, useState } from "react"
+import {
+  AlertTriangle,
+  CalendarCheck,
+  CalendarClock,
+  Clock,
+  FileText,
+  UserCheck,
+  Users,
+} from "lucide-react"
+import type { SchedulingData } from "@/lib/scheduling/types"
+import type { Shift } from "@/lib/connecteam/types"
+import { fmtDate, fmtMoneyCompact, fmtNumber } from "@/lib/format"
+import { Panel } from "@/components/dashboard/panel"
+import { NavTabs } from "@/components/nav-tabs"
+
+const REFRESH_MS = 300_000
+
+const hm = (iso: string) =>
+  new Date(iso).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })
+const dayName = (iso: string) =>
+  new Date(iso).toLocaleDateString("en-AU", { weekday: "short", day: "2-digit", month: "short" })
+
+export function SchedulingView({ initial }: { initial: SchedulingData }) {
+  const [data, setData] = useState(initial)
+
+  useEffect(() => {
+    const id = setInterval(async () => {
+      try {
+        const res = await fetch("/api/scheduling", { cache: "no-store" })
+        if (res.ok) setData((await res.json()) as SchedulingData)
+      } catch {
+        /* keep last good */
+      }
+    }, REFRESH_MS)
+    return () => clearInterval(id)
+  }, [])
+
+  const c = data.counts
+  const available = data.availability.filter((t) => t.available)
+  const onRoad = data.availability.filter((t) => !t.available)
+  const maxType = Math.max(1, ...data.typeBreakdown.map((t) => t.total))
+
+  return (
+    <div className="min-h-full bg-gradient-to-b from-slate-50 to-slate-100 p-5 lg:p-7">
+      {/* Header */}
+      <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-teal-600 to-cyan-600 px-7 py-6 text-white shadow-lg shadow-teal-600/20">
+        <div>
+          <h1 className="text-3xl font-extrabold tracking-tight">Scheduling</h1>
+          <p className="mt-1 text-sm text-teal-100">
+            Approvals · appointments · who&apos;s on — PrimeEco + Connecteam
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <NavTabs />
+          <SourceBadge label="PrimeEco" live={data.primeecoLive} />
+          <SourceBadge label="Connecteam" live={data.connecteamLive} />
+          <span className="text-sm">{hm(data.generatedAt)}</span>
+        </div>
+      </header>
+
+      {data.error && (
+        <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          {data.error}
+        </div>
+      )}
+
+      {/* KPI row */}
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-3 xl:grid-cols-6">
+        <Kpi label="Approved (7d)" value={fmtNumber(c.approved7d)} icon={CalendarCheck} tint="text-emerald-600 bg-emerald-100" />
+        <Kpi label="Needs scheduling" value={fmtNumber(c.unscheduled)} icon={AlertTriangle} tint="text-rose-600 bg-rose-100" />
+        <Kpi label="Upcoming appts" value={fmtNumber(c.upcoming)} icon={CalendarClock} tint="text-blue-600 bg-blue-100" />
+        <Kpi label="Draft (tentative)" value={fmtNumber(c.draft)} icon={FileText} tint="text-amber-600 bg-amber-100" />
+        <Kpi label="Open shifts" value={fmtNumber(c.openShifts)} icon={Clock} tint="text-violet-600 bg-violet-100" />
+        <Kpi label="Techs on today" value={fmtNumber(c.techsOnToday)} icon={Users} tint="text-teal-600 bg-teal-100" />
+      </div>
+
+      {/* Row: recently approved + needs scheduling */}
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Recently Approved" subtitle="authorised estimates · last 14 days">
+          <ul className="max-h-[360px] space-y-2 overflow-auto">
+            {data.approvals.length === 0 && <li className="text-sm text-slate-400">No recent approvals</li>}
+            {data.approvals.map((a) => (
+              <li
+                key={a.jobId}
+                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="font-semibold text-slate-900">{a.jobNumber}</span>
+                    {a.scheduled ? (
+                      <Chip tone="emerald">scheduled {a.firstShiftAt ? `· ${fmtDate(a.firstShiftAt)}` : ""}</Chip>
+                    ) : (
+                      <Chip tone="rose">needs booking</Chip>
+                    )}
+                  </div>
+                  <div className="truncate text-xs text-slate-500">
+                    {a.client} · {a.division}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  <div className="text-xs text-slate-400">{fmtDate(a.approvedAt)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+
+        <Panel title="Needs Scheduling" subtitle="approved but no appointment booked yet" className="ring-1 ring-rose-100">
+          <ul className="max-h-[360px] space-y-2 overflow-auto">
+            {data.needsScheduling.length === 0 && (
+              <li className="text-sm text-emerald-600">🎉 Everything approved is on the roster.</li>
+            )}
+            {data.needsScheduling.map((a) => (
+              <li
+                key={a.jobId}
+                className="flex items-center justify-between gap-3 rounded-xl bg-rose-50/60 px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <span className="font-semibold text-slate-900">{a.jobNumber}</span>
+                  <div className="truncate text-xs text-slate-500">
+                    {a.client} · {a.division} · {a.estimator}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+                  <div className="text-xs text-slate-400">approved {fmtDate(a.approvedAt)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      </div>
+
+      {/* Week strip */}
+      <div className="mt-5">
+        <Panel title="This Week" subtitle="appointments by day · amber = draft, rose = unassigned">
+          <div className="flex gap-3 overflow-x-auto pb-1">
+            {data.week.map((col) => (
+              <div key={col.date} className="min-w-[220px] flex-1 rounded-2xl bg-slate-50 p-3">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <span className="text-sm font-bold text-slate-700">{col.label}</span>
+                  <span className="text-xs text-slate-400">{col.shifts.length}</span>
+                </div>
+                <ul className="space-y-1.5">
+                  {col.shifts.length === 0 && <li className="text-xs text-slate-300">—</li>}
+                  {col.shifts.map((s) => (
+                    <ShiftCard key={s.id} shift={s} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      </div>
+
+      {/* Row: appointment types + availability */}
+      <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Panel title="Appointments by Type" subtitle="upcoming · confirmed vs draft">
+          <ul className="space-y-3">
+            {data.typeBreakdown.length === 0 && <li className="text-sm text-slate-400">No upcoming appointments</li>}
+            {data.typeBreakdown.map((t) => (
+              <li key={t.type} className="flex items-center gap-3">
+                <span className="w-40 shrink-0 truncate text-sm font-medium text-slate-700" title={t.type}>
+                  {t.type}
+                </span>
+                <div className="flex h-4 flex-1 overflow-hidden rounded-full bg-slate-100">
+                  <div
+                    className="h-full bg-emerald-500"
+                    style={{ width: `${(t.confirmed / maxType) * 100}%` }}
+                    title={`${t.confirmed} confirmed`}
+                  />
+                  <div
+                    className="h-full bg-amber-400"
+                    style={{ width: `${(t.draft / maxType) * 100}%` }}
+                    title={`${t.draft} draft`}
+                  />
+                </div>
+                <span className="w-10 shrink-0 text-right text-sm font-bold tabular-nums text-slate-900">
+                  {fmtNumber(t.total)}
+                </span>
+                {t.draft > 0 && <Chip tone="amber">{t.draft} draft</Chip>}
+              </li>
+            ))}
+          </ul>
+        </Panel>
+
+        <Panel title="Who's Available Today" subtitle={`${available.length} free · ${onRoad.length} on the road`}>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-600">
+                <UserCheck className="h-4 w-4" /> Available
+              </h3>
+              <ul className="space-y-1.5">
+                {available.length === 0 && <li className="text-xs text-slate-400">Nobody free</li>}
+                {available.map((t) => (
+                  <li key={t.userId} className="flex items-center justify-between rounded-lg bg-emerald-50/70 px-2.5 py-1.5">
+                    <span className="truncate text-sm text-slate-700">{t.name}</span>
+                    <span className="text-xs text-slate-400">{t.nextAt ? `next ${fmtDate(t.nextAt)}` : "free"}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-slate-500">
+                <Users className="h-4 w-4" /> On the road
+              </h3>
+              <ul className="space-y-1.5">
+                {onRoad.length === 0 && <li className="text-xs text-slate-400">Nobody booked</li>}
+                {onRoad.map((t) => (
+                  <li key={t.userId} className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5">
+                    <span className="truncate text-sm text-slate-700">{t.name}</span>
+                    <span className="text-xs font-semibold tabular-nums text-slate-500">{t.todayShifts} today</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {data.openShifts.length > 0 && (
+            <div className="mt-4 border-t border-slate-100 pt-3">
+              <h3 className="mb-2 text-xs font-bold uppercase tracking-wide text-rose-600">
+                Unassigned shifts ({data.openShifts.length})
+              </h3>
+              <ul className="space-y-1.5">
+                {data.openShifts.slice(0, 6).map((s) => (
+                  <li key={s.id} className="flex items-center justify-between rounded-lg bg-rose-50/60 px-2.5 py-1.5">
+                    <span className="truncate text-sm text-slate-700" title={s.title}>{s.title}</span>
+                    <span className="shrink-0 text-xs text-slate-400">{dayName(s.start)} {hm(s.start)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Panel>
+      </div>
+
+      <p className="mt-6 text-center text-xs text-slate-400">
+        Approvals: PrimeEco authorised estimates · Roster: Connecteam scheduler (drafts included). Refreshes every 5 min.
+      </p>
+    </div>
+  )
+}
+
+/* ---- small building blocks ---- */
+
+function ShiftCard({ shift }: { shift: Shift }) {
+  const tone = shift.open ? "border-rose-200 bg-rose-50" : shift.status === "draft" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
+  return (
+    <li className={`rounded-lg border px-2 py-1.5 ${tone}`}>
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-xs font-semibold tabular-nums text-slate-600">{hm(shift.start)}</span>
+        <div className="flex gap-1">
+          {shift.status === "draft" && <Chip tone="amber">draft</Chip>}
+          {shift.open && <Chip tone="rose">open</Chip>}
+        </div>
+      </div>
+      <div className="truncate text-xs font-medium text-slate-800" title={shift.title}>
+        {shift.type}
+      </div>
+      <div className="truncate text-[11px] text-slate-400">
+        {shift.open ? "unassigned" : shift.userNames.join(", ")}
+      </div>
+    </li>
+  )
+}
+
+const CHIP_TONES = {
+  emerald: "bg-emerald-100 text-emerald-700",
+  rose: "bg-rose-100 text-rose-700",
+  amber: "bg-amber-100 text-amber-700",
+} as const
+
+function Chip({ tone, children }: { tone: keyof typeof CHIP_TONES; children: React.ReactNode }) {
+  return (
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${CHIP_TONES[tone]}`}>
+      {children}
+    </span>
+  )
+}
+
+function SourceBadge({ label, live }: { label: string; live: boolean }) {
+  return (
+    <span
+      className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold ${
+        live ? "bg-emerald-300/25 text-white" : "bg-amber-300/25 text-white"
+      }`}
+      title={`${label}: ${live ? "live data" : "sample data"}`}
+    >
+      <span className={`h-2 w-2 rounded-full ${live ? "bg-emerald-200 animate-pulse" : "bg-amber-200"}`} />
+      {label}
+    </span>
+  )
+}
+
+function Kpi({
+  label,
+  value,
+  icon: Icon,
+  tint,
+}: {
+  label: string
+  value: string
+  icon: typeof CalendarCheck
+  tint: string
+}) {
+  return (
+    <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_16px_rgba(15,23,42,0.05)]">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold uppercase tracking-wide text-slate-400">{label}</span>
+        <span className={`inline-flex h-9 w-9 items-center justify-center rounded-2xl ${tint}`}>
+          <Icon className="h-5 w-5" />
+        </span>
+      </div>
+      <div className="mt-2 text-3xl font-extrabold tabular-nums text-slate-900">{value}</div>
+    </div>
+  )
+}

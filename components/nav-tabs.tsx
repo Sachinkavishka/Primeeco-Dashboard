@@ -7,6 +7,7 @@ import { Lock } from "lucide-react"
 
 const PUBLIC_TABS = [
   { href: "/dashboard", label: "Operations" },
+  { href: "/scheduling", label: "Scheduling" },
   { href: "/settings", label: "Settings" },
 ]
 const FINANCE_TABS = [
