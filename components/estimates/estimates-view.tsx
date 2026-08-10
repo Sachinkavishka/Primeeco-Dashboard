@@ -20,69 +20,55 @@ interface Filters {
 }
 const EMPTY: Filters = { estimator: "", status: "", type: "", division: "", client: "" }
 
-export function EstimatesView({ initial }: { initial: EstimatesData }) {
-  const [estimates, setEstimates] = useState<EstimateRow[]>(initial.estimates)
+export function EstimatesView() {
+  const [estimates, setEstimates] = useState<EstimateRow[]>([])
   const [meta, setMeta] = useState({
-    live: initial.live,
-    generatedAt: initial.generatedAt,
-    error: initial.error,
-    totalPages: initial.totalPages,
-    loaded: 1,
+    live: false,
+    generatedAt: new Date().toISOString(),
+    error: undefined as string | undefined,
+    totalPages: 1,
+    loaded: 0,
   })
   const [f, setF] = useState<Filters>(EMPTY)
 
-  // Progressive loading: page 1 is `initial`; stream in the rest, and refresh
-  // all pages periodically. Each request is one small (fast) page.
+  // Everything loads CLIENT-SIDE, one small page per request, so the page shell
+  // renders instantly and there's no server-side PrimeEco fetch to time out.
   useEffect(() => {
     let cancelled = false
 
-    const appendRest = async () => {
-      const acc = [...initial.estimates]
-      let total = initial.totalPages
-      for (let p = 2; p <= total; p++) {
-        try {
-          const res = await fetch(`/api/estimates?page=${p}`, { cache: "no-store" })
-          if (!res.ok) break
-          const d = (await res.json()) as EstimatesData
-          if (cancelled) return
-          acc.push(...d.estimates)
-          total = d.totalPages
-          setEstimates([...acc])
-          setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, totalPages: total, loaded: p }))
-        } catch {
-          break
-        }
-      }
-    }
-
-    const fullReload = async () => {
+    const load = async (stream: boolean) => {
       const acc: EstimateRow[] = []
       let p = 1
       let total = 1
       do {
         try {
           const res = await fetch(`/api/estimates?page=${p}`, { cache: "no-store" })
-          if (!res.ok) break
+          if (!res.ok) {
+            setMeta((m) => ({ ...m, error: `Load failed (${res.status})` }))
+            break
+          }
           const d = (await res.json()) as EstimatesData
           if (cancelled) return
           acc.push(...d.estimates)
           total = d.totalPages
-          setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, totalPages: total, loaded: p }))
+          if (stream) setEstimates([...acc])
+          setMeta((m) => ({ ...m, live: d.live, generatedAt: d.generatedAt, error: d.error, totalPages: total, loaded: p }))
           p++
         } catch {
+          setMeta((m) => ({ ...m, error: "Load failed — retrying next refresh" }))
           break
         }
       } while (p <= total)
       if (!cancelled) setEstimates(acc)
     }
 
-    if (initial.totalPages > 1) appendRest()
-    const id = setInterval(fullReload, REFRESH_MS)
+    load(true) // first load streams in
+    const id = setInterval(() => load(false), REFRESH_MS) // refresh replaces at end
     return () => {
       cancelled = true
       clearInterval(id)
     }
-  }, [initial])
+  }, [])
 
   // Enrich estimates with job number / client / division from the ops job cache
   // (fetched separately so the slow job load never blocks estimates).
