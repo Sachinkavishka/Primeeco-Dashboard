@@ -230,11 +230,20 @@ export function EstimatesView() {
     return [...latest.values()]
   }, [enriched])
 
+  // OPEN JOBS ONLY: estimates on Closed jobs are history — if a job comes back
+  // it gets re-opened (status change), so it reappears here automatically.
+  // Only rows whose job is known-Closed are dropped: while the job feed is
+  // still loading (or for a job missing from it) nothing is hidden.
+  const openOnly = useMemo(
+    () => deduped.filter((e) => jobMap.get(e.jobId)?.statusType !== "Closed"),
+    [deduped, jobMap],
+  )
+
   const options = useMemo(() => {
     const uniq = (arr: string[]) => [...new Set(arr.filter(Boolean))].sort()
     // Filter dropdown options respect the current state tab, so e.g. the status
     // list only shows statuses that exist within the selected state.
-    const scope = f.state ? deduped.filter((e) => e.state === f.state) : deduped
+    const scope = f.state ? openOnly.filter((e) => e.state === f.state) : openOnly
     return {
       estimators: uniq(scope.map((e) => e.estimator)),
       statuses: uniq(scope.map((e) => e.status)),
@@ -242,20 +251,21 @@ export function EstimatesView() {
       divisions: uniq(scope.map((e) => e.division)),
       clients: uniq(scope.map((e) => e.client)),
     }
-  }, [deduped, f.state])
+  }, [openOnly, f.state])
 
-  // Counts per state tab (deduped), for the tab badges.
+  // Counts per state tab (open jobs only), for the tab badges.
   const stateCounts = useMemo(() => {
-    const c = { authorised: 0, pending: 0, rejected: 0, all: deduped.length }
-    for (const e of deduped) if (e.state) c[e.state]++
+    const c = { authorised: 0, pending: 0, rejected: 0, all: openOnly.length }
+    for (const e of openOnly) if (e.state) c[e.state]++
     return c
-  }, [deduped])
+  }, [openOnly])
 
   // Pipeline metrics span BOTH states (pending → approval, authorised →
-  // invoicing), so they read the deduped set directly — respecting the business
-  // filters (estimator/division/client) but NOT the state tab / status / type.
+  // invoicing), so they read the open-jobs set directly — respecting the
+  // business filters (estimator/division/client) but NOT the state tab /
+  // status / type.
   const pipeline = useMemo(() => {
-    const base = deduped.filter(
+    const base = openOnly.filter(
       (e) =>
         (!f.estimator || e.estimator === f.estimator) &&
         (!f.division || e.division === f.division) &&
@@ -267,23 +277,22 @@ export function EstimatesView() {
     // estimates behind the number.
     const stat = (list: EstimateRow[]) => ({ jobs: jobs(list), value: value(list), count: list.length, list })
 
-    const openJob = base.filter((e) => jobMap.get(e.jobId)?.statusType === "Open")
     const authorised = base.filter((e) => e.state === "authorised")
     return {
       hasInvoiceData: invoicedJobIds.size > 0,
-      openJob: stat(openJob),
+      openJob: stat(base),
       pending: stat(base.filter((e) => e.state === "pending")),
       invoiced: stat(authorised.filter((e) => invoicedJobIds.has(e.jobId))),
       toInvoice: stat(authorised.filter((e) => !invoicedJobIds.has(e.jobId))),
     }
-  }, [deduped, jobMap, invoicedJobIds, f.estimator, f.division, f.client])
+  }, [openOnly, invoicedJobIds, f.estimator, f.division, f.client])
 
   // Pipeline drill-down: which card's estimate list is open, if any.
   const [drill, setDrill] = useState<{ title: string; explain: string; rows: EstimateRow[] } | null>(null)
 
   const rows = useMemo(
     () =>
-      deduped.filter(
+      openOnly.filter(
         (e) =>
           (!f.state || e.state === f.state) &&
           (!f.estimator || e.estimator === f.estimator) &&
@@ -292,7 +301,7 @@ export function EstimatesView() {
           (!f.division || e.division === f.division) &&
           (!f.client || e.client === f.client),
       ),
-    [deduped, f],
+    [openOnly, f],
   )
 
   const loadingMore = meta.loaded < meta.totalPages
@@ -309,7 +318,9 @@ export function EstimatesView() {
       <header className="mb-6 flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-r from-violet-600 to-indigo-600 px-7 py-6 text-white shadow-lg shadow-violet-600/20">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight">Estimates by Estimator</h1>
-          <p className="mt-1 text-sm text-violet-100">Locked snapshot estimates · real authorised ex-GST · switch Authorised / Pending below</p>
+          <p className="mt-1 text-sm text-violet-100">
+            Locked snapshot estimates · OPEN jobs only (re-opened jobs reappear) · real authorised ex-GST
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-4">
           <NavTabs />
@@ -410,7 +421,8 @@ export function EstimatesView() {
               onClick={() =>
                 setDrill({
                   title: "Estimates on open jobs",
-                  explain: "Every snapshot estimate (latest version, any status) whose job is currently Open in PrimeEco.",
+                  explain:
+                    "Every snapshot estimate (latest version, any status) on the open jobs. Closed jobs are excluded page-wide — if a job is re-opened its estimates come back automatically.",
                   rows: pipeline.openJob.list,
                 })
               }
@@ -547,7 +559,8 @@ export function EstimatesView() {
       </div>
 
       <p className="mt-6 text-center text-xs text-slate-400">
-        Source: /estimates-snapshot (locked estimates, latest version each) · real authorisedTotalExcludingTax · all figures exclude GST
+        Source: /estimates-snapshot (locked estimates, latest version each) · OPEN jobs only — closed jobs excluded, re-opened jobs
+        reappear · real authorisedTotalExcludingTax · all figures exclude GST
       </p>
 
       {/* Pipeline drill-down: the exact estimate rows behind a card's figure */}
