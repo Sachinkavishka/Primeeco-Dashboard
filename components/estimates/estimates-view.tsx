@@ -15,7 +15,8 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
 // A normal page refresh then hydrates instantly from cache with NO network
 // calls; the feeds are only fetched on the first visit of the day (when the
 // cached date no longer matches) or when the user hits Refresh.
-const CK_EST = "dfm-est-snapshot-v2"
+// v3: bumped when the pending-value fix landed so cached $0 rows get refetched.
+const CK_EST = "dfm-est-snapshot-v3"
 const CK_JOBS = "dfm-est-jobs-v2"
 const CK_INV = "dfm-est-invoiced-v2"
 const CACHE_ROLLOVER_MS = 3_600_000 // re-check once an hour for the date rolling over (always-on displays)
@@ -262,7 +263,9 @@ export function EstimatesView() {
     )
     const jobs = (list: EstimateRow[]) => new Set(list.map((e) => e.jobId).filter(Boolean)).size
     const value = (list: EstimateRow[]) => list.reduce((a, e) => a + e.valueExGst, 0)
-    const stat = (list: EstimateRow[]) => ({ jobs: jobs(list), value: value(list), count: list.length })
+    // Keep the row list on each stat so the drill-down can show the exact
+    // estimates behind the number.
+    const stat = (list: EstimateRow[]) => ({ jobs: jobs(list), value: value(list), count: list.length, list })
 
     const openJob = base.filter((e) => jobMap.get(e.jobId)?.statusType === "Open")
     const authorised = base.filter((e) => e.state === "authorised")
@@ -274,6 +277,9 @@ export function EstimatesView() {
       toInvoice: stat(authorised.filter((e) => !invoicedJobIds.has(e.jobId))),
     }
   }, [deduped, jobMap, invoicedJobIds, f.estimator, f.division, f.client])
+
+  // Pipeline drill-down: which card's estimate list is open, if any.
+  const [drill, setDrill] = useState<{ title: string; explain: string; rows: EstimateRow[] } | null>(null)
 
   const rows = useMemo(
     () =>
@@ -398,39 +404,67 @@ export function EstimatesView() {
               label="Estimates on open jobs"
               value={fmtMoneyCompact(pipeline.openJob.value)}
               jobs={pipeline.openJob.jobs}
-              note={`${fmtNumber(pipeline.openJob.count)} estimates`}
+              note={`${fmtNumber(pipeline.openJob.count)} estimates · click for detail`}
               icon={FolderOpen}
               accent="sky"
+              onClick={() =>
+                setDrill({
+                  title: "Estimates on open jobs",
+                  explain: "Every snapshot estimate (latest version, any status) whose job is currently Open in PrimeEco.",
+                  rows: pipeline.openJob.list,
+                })
+              }
             />
             <PipelineCard
               label="Awaiting approval"
               badge="Lock + Pending"
               value={fmtMoneyCompact(pipeline.pending.value)}
               jobs={pipeline.pending.jobs}
-              note="jobs to approve (future)"
+              note="jobs to approve · click for detail"
               icon={Clock}
               accent="amber"
-              onClick={() => set({ state: "pending" })}
+              onClick={() =>
+                setDrill({
+                  title: "Awaiting approval (Lock + Pending)",
+                  explain:
+                    "Locked snapshot estimates whose status is not yet authorised — the estimate's own ex-GST total (nothing authorised yet).",
+                  rows: pipeline.pending.list,
+                })
+              }
             />
             <PipelineCard
               label="Authorised & invoiced"
               badge="Lock + Authorised"
               value={fmtMoneyCompact(pipeline.invoiced.value)}
               jobs={pipeline.invoiced.jobs}
-              note={pipeline.hasInvoiceData ? "jobs invoiced" : "invoice data unavailable"}
+              note={pipeline.hasInvoiceData ? "jobs invoiced · click for detail" : "invoice data unavailable"}
               icon={Receipt}
               accent="emerald"
-              onClick={() => set({ state: "authorised" })}
+              onClick={() =>
+                setDrill({
+                  title: "Authorised & invoiced (Lock + Authorised)",
+                  explain:
+                    "Authorised estimates (real authorisedTotalExcludingTax) whose job already has at least one AR invoice (any status except Draft/Cancelled). The $ figure is the ESTIMATE value, not the invoice total.",
+                  rows: pipeline.invoiced.list,
+                })
+              }
             />
             <PipelineCard
               label="Authorised, to invoice"
               badge="Lock + Authorised"
               value={fmtMoneyCompact(pipeline.toInvoice.value)}
               jobs={pipeline.toInvoice.jobs}
-              note="future revenue to bill"
+              note="future revenue to bill · click for detail"
               icon={TrendingUp}
               accent="violet"
-              onClick={() => set({ state: "authorised" })}
+              onClick={() =>
+                setDrill({
+                  title: "Authorised, to invoice (Lock + Authorised)",
+                  explain:
+                    "Authorised estimates whose job has NO AR invoice yet — authorised work still to be billed (future revenue).",
+                  rows: pipeline.toInvoice.list,
+                })
+              }
             />
           </div>
           {!pipeline.hasInvoiceData && (
@@ -515,6 +549,73 @@ export function EstimatesView() {
       <p className="mt-6 text-center text-xs text-slate-400">
         Source: /estimates-snapshot (locked estimates, latest version each) · real authorisedTotalExcludingTax · all figures exclude GST
       </p>
+
+      {/* Pipeline drill-down: the exact estimate rows behind a card's figure */}
+      {drill && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4 backdrop-blur-sm"
+          onClick={() => setDrill(null)}
+        >
+          <div
+            className="flex max-h-[85vh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl bg-white shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-7 py-5">
+              <div>
+                <h3 className="text-xl font-bold text-slate-900">{drill.title}</h3>
+                <p className="mt-0.5 text-sm text-slate-500">
+                  {fmtNumber(drill.rows.length)} estimates · {fmtNumber(new Set(drill.rows.map((e) => e.jobId).filter(Boolean)).size)} jobs ·{" "}
+                  {fmtMoney(drill.rows.reduce((a, e) => a + e.valueExGst, 0))} ex-GST
+                </p>
+                <p className="mt-1 max-w-2xl text-xs text-slate-400">{drill.explain}</p>
+              </div>
+              <button
+                onClick={() => setDrill(null)}
+                className="rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="overflow-y-auto px-7 py-2">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-white">
+                  <tr className="text-left text-xs uppercase tracking-wide text-slate-400">
+                    <th className="py-2 pr-4 font-semibold">Job #</th>
+                    <th className="py-2 pr-4 font-semibold">Estimator</th>
+                    <th className="py-2 pr-4 font-semibold">Client</th>
+                    <th className="py-2 pr-4 font-semibold">Status</th>
+                    <th className="py-2 pr-4 font-semibold">Invoiced</th>
+                    <th className="py-2 pr-4 text-right font-semibold">Value (ex-GST)</th>
+                    <th className="py-2 text-right font-semibold">Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[...drill.rows]
+                    .sort((a, b) => b.valueExGst - a.valueExGst)
+                    .map((e) => (
+                      <tr key={e.id} className="border-t border-slate-100">
+                        <td className="whitespace-nowrap py-2.5 pr-4 font-semibold text-slate-900">{e.jobNumber}</td>
+                        <td className="whitespace-nowrap py-2.5 pr-4 text-slate-600">{e.estimator}</td>
+                        <td className="max-w-[200px] truncate py-2.5 pr-4 text-slate-600">{e.client}</td>
+                        <td className="whitespace-nowrap py-2.5 pr-4 text-slate-600">{e.status}</td>
+                        <td className="whitespace-nowrap py-2.5 pr-4">
+                          {invoicedJobIds.has(e.jobId) ? (
+                            <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-700">Yes</span>
+                          ) : (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-500">No</span>
+                          )}
+                        </td>
+                        <td className="whitespace-nowrap py-2.5 pr-4 text-right tabular-nums text-slate-900">{fmtMoney(e.valueExGst)}</td>
+                        <td className="whitespace-nowrap py-2.5 text-right tabular-nums text-slate-400">{fmtDate(e.createdAt)}</td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

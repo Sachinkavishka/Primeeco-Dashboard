@@ -116,9 +116,15 @@ const getCachedPage = unstable_cache(
 function normalize(e: NonNullable<Envelope["data"]>[number]): EstimateRow {
   const a = e.attributes ?? {}
   const status = str(a.estimateStatus) ?? "Unknown"
-  // /estimates-snapshot carries the real ex-GST authorised total. Fall back to
-  // deriving from the tax-inclusive total only if the direct field is absent.
-  const exGst = a.authorisedTotalExcludingTax != null ? num(a.authorisedTotalExcludingTax) : num(a.totalIncludingTax) / 1.1
+  // Value, ex-GST. Authorised rows carry the real authorisedTotalExcludingTax;
+  // PENDING rows haven't been authorised yet, so that field is 0/absent — for
+  // them the estimate's own total is the right figure. Chain: authorised
+  // ex-GST → totalExcludingTax → subtotal → totalIncludingTax ÷ 1.1.
+  const exGst =
+    num(a.authorisedTotalExcludingTax) ||
+    num(a.totalExcludingTax) ||
+    num(a.subtotal) ||
+    num(a.totalIncludingTax) / 1.1
   const id = e.id ?? crypto.randomUUID()
   const jobId = str(a.jobId) ?? ""
   return {
