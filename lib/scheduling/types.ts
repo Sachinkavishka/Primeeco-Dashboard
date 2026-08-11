@@ -40,6 +40,11 @@ export interface ApprovalSource {
    * need scheduling.
    */
   invoiced: InvoicedInfo | null
+  /**
+   * Labour time from THIS estimate's own lines. Null when it has none (or,
+   * for mock rows, when the facade should fall back to the mock hours map).
+   */
+  estHours: JobEstimateHours | null
   /** The estimate's line items — the full "inside" detail. */
   lines: EstimateLine[]
 }

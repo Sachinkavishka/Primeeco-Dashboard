@@ -45,6 +45,7 @@ export function getMockApprovals(): ApprovalSource[] {
           : i === 6
             ? { invoiceNumber: "INV-2044", invoicedDate: new Date(now).toISOString().slice(0, 10), status: "Sent", paid: false, progress: true }
             : null,
+      estHours: null,
       lines: [
         {
           trade: "Labour",

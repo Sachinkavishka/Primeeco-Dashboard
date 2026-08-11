@@ -8,6 +8,7 @@ import {
   isHourUnit,
   roleOf,
 } from "@/lib/primeeco/estimate-hours"
+import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { isPrimeecoConfigured } from "@/lib/primeeco/config"
 import { getDashboardData } from "@/lib/primeeco"
 import { getArInvoiceIndex } from "@/lib/primeeco/receivables"
@@ -56,6 +57,12 @@ const iso = (v: unknown): string | null => {
 interface EstimateMeta {
   label: string | null
   estimateType: string | null
+  /**
+   * "Authorised" | "Pending" | "Cancelled" | … — the estimate's REAL status.
+   * The line-level authorised flag alone is not enough: pending/cancelled
+   * estimates keep authorised lines, which put them on the board incorrectly.
+   */
+  estimateStatus: string | null
   /** Official authorised total ex-GST, preferred over the line sum. */
   valueExGst: number | null
 }
@@ -65,18 +72,33 @@ interface SingleEnvelope {
 }
 
 async function fetchEstimateMeta(estimateId: string): Promise<EstimateMeta> {
-  const env = await apiFetch<SingleEnvelope>(`/estimates-snapshot/${estimateId}`)
+  let env: SingleEnvelope
+  try {
+    env = await apiFetch<SingleEnvelope>(`/estimates-snapshot/${estimateId}`)
+  } catch (err) {
+    // A missing snapshot (deleted/cancelled estimate) is a PERMANENT answer —
+    // return it as a cacheable "Missing" meta so it doesn't block the
+    // completeness flag or get refetched every request. Transient errors
+    // rethrow (and stay uncached) so they retry on the next poll.
+    const message = err instanceof Error ? err.message : ""
+    if (/\(404\)/.test(message)) {
+      return { label: null, estimateType: null, estimateStatus: "Missing", valueExGst: null }
+    }
+    throw err
+  }
   const a = env.data?.attributes ?? {}
   const value = a.authorisedTotalExcludingTax
   return {
     label: str(a.label) ?? null,
     estimateType: str(a.estimateType) ?? null,
+    estimateStatus: str(a.estimateStatus) ?? null,
     valueExGst: value === undefined || value === null ? null : num(value),
   }
 }
 
-/** Per-estimate meta through the Data Cache (estimateId is in the cache key). */
-const getCachedMeta = unstable_cache(fetchEstimateMeta, ["primeeco-estimate-meta-v1"], {
+/** Per-estimate meta through the Data Cache (estimateId is in the cache key).
+ *  v2: cache-key bump — v1 entries were cached without estimateStatus. */
+const getCachedMeta = unstable_cache(fetchEstimateMeta, ["primeeco-estimate-meta-v2"], {
   revalidate: 4 * 60 * 60,
   tags: ["primeeco-estimate-meta"],
 })
@@ -171,6 +193,29 @@ function findInvoice(
   }
 }
 
+/**
+ * Estimated labour time for ONE estimate, from its own (already role-tagged,
+ * EH-excluded) lines. Derived here — rather than from the job-wide hours
+ * aggregate — so hours only ever come from estimates whose STATUS is
+ * authorised; a pending or cancelled sibling estimate on the same job no
+ * longer pollutes the numbers.
+ */
+function aggregateLines(jobId: string, lines: EstimateLine[]): JobEstimateHours | null {
+  const out: JobEstimateHours = { jobId, byRole: {}, totalHours: 0, totalDays: 0 }
+  for (const l of lines) {
+    if (!l.role || !l.labourUnit) continue
+    const bucket = (out.byRole[l.role as keyof typeof out.byRole] ??= { hours: 0, days: 0 })
+    if (isHourUnit(l.labourUnit)) {
+      bucket.hours += l.labourQuantity
+      out.totalHours += l.labourQuantity
+    } else if (isDayUnit(l.labourUnit)) {
+      bucket.days += l.labourQuantity
+      out.totalDays += l.labourQuantity
+    }
+  }
+  return out.totalHours > 0 || out.totalDays > 0 ? out : null
+}
+
 let lastGood: RecentApprovals | null = null
 
 export async function getRecentApprovals(): Promise<RecentApprovals> {
@@ -233,7 +278,10 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         division: job?.division ?? "—",
         estimator: e.createdBy,
         valueExGst: meta?.valueExGst ?? e.value,
-        status: "Authorised",
+        // Real estimate status — the facade keeps only authorised ones, so
+        // Pending/Cancelled estimates (which still have authorised-flagged
+        // lines) stay off the board. Unknown until the meta loads.
+        status: meta?.estimateStatus ?? "Unknown",
         createdAt: e.createdAt,
         statusType: job?.statusType ?? null,
         jobType: job?.jobType ?? null,
@@ -245,6 +293,7 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         estimateLabel: meta?.label ?? null,
         estimateType: meta?.estimateType ?? null,
         invoiced: findInvoice(invoiceIndex?.get(e.jobId), e.createdAt),
+        estHours: aggregateLines(e.jobId, e.lines),
         lines: e.lines,
       }
     })

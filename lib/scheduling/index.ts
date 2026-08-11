@@ -75,7 +75,9 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
     approvedAt: e.createdAt,
     scheduled: matches.length > 0,
     firstShiftAt: firstShift ?? null,
-    estHours: hoursByJob[e.jobId] ?? null,
+    // Prefer the estimate's OWN hours (status-filtered); the job-wide map is
+    // the fallback for mock rows.
+    estHours: e.estHours ?? hoursByJob[e.jobId] ?? null,
     jobType: e.jobType,
     address: e.address,
     jobDescription: e.jobDescription,
