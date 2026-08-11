@@ -80,7 +80,7 @@ const num = (v: unknown): number => {
 }
 const str = (v: unknown): string => (typeof v === "string" ? v : "")
 
-function roleOf(description: string): HoursRole {
+export function roleOf(description: string): HoursRole {
   const d = description.toLowerCase()
   if (/technician/.test(d)) return "Technician"
   if (/project\s*manager/.test(d)) return "Project Manager"
@@ -89,8 +89,15 @@ function roleOf(description: string): HoursRole {
   return "Other"
 }
 
-const isHourUnit = (u: string) => /^hr/i.test(u)
-const isDayUnit = (u: string) => /^(day|wk|week)/i.test(u)
+export const isHourUnit = (u: string) => /^hr/i.test(u)
+export const isDayUnit = (u: string) => /^(day|wk|week)/i.test(u)
+
+/**
+ * Equipment Hire lines are RENTAL periods (dehumidifier days etc.), not people
+ * time — measured live, 185 of 186 day-unit lines were Equipment Hire. They are
+ * excluded from labour time entirely (per the coordinators).
+ */
+export const isEquipmentHireTrade = (trade: string) => /equipment\s*hire/i.test(trade)
 
 function parseCreatedAt(v: unknown): number {
   const s = str(v)
@@ -167,6 +174,8 @@ function aggregate(items: Array<Record<string, unknown>>): Record<string, JobEst
     if (!jobId) continue
     const qty = num(a.labourQuantity)
     if (qty <= 0) continue
+    // Rental periods (dehu days etc.), not people time — excluded entirely.
+    if (isEquipmentHireTrade(str(a.trade))) continue
     const unit = str(a.labourUnit)
     const hr = isHourUnit(unit)
     if (!hr && !isDayUnit(unit)) continue

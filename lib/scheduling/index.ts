@@ -76,6 +76,14 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
     scheduled: matches.length > 0,
     firstShiftAt: firstShift ?? null,
     estHours: hoursByJob[e.jobId] ?? null,
+    jobType: e.jobType,
+    address: e.address,
+    jobDescription: e.jobDescription,
+    primeUrl: e.primeUrl,
+    estimateId: e.estimateId,
+    estimateLabel: e.estimateLabel,
+    estimateType: e.estimateType,
+    lines: e.lines,
   }
 }
 
@@ -161,8 +169,12 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   const hoursByJob = usingMockApprovals ? getMockHours() : hoursRes.byJob
 
   // Approvals: authorised estimates within the recent window, newest first.
+  // Coordinator scope: OPEN jobs only (unknown status is kept, "Closed" is
+  // dropped) and no equipment-hire-only estimates (rental periods, not works).
   const approvals: ApprovedJob[] = estimateRows
     .filter((e) => APPROVED_STATUS.test(e.status))
+    .filter((e) => e.statusType !== "Closed")
+    .filter((e) => !e.equipmentHireOnly)
     .filter((e) => {
       if (!e.createdAt) return false
       return new Date(e.createdAt).getTime() >= windowStart

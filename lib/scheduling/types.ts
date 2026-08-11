@@ -16,6 +16,41 @@ export interface ApprovalSource {
   valueExGst: number
   status: string
   createdAt: string | null
+  /** "Open" | "Closed" from the job's status lookup; null when unknown. */
+  statusType: string | null
+  /** PrimeEco job type (Makesafe, Job, Quote, Restoration, …). */
+  jobType: string | null
+  /** Formatted site address. */
+  address: string | null
+  /** The job's works-requested / incident description. */
+  jobDescription: string | null
+  /** Deep link into PrimeEco for this job. */
+  primeUrl: string | null
+  /** True when every line of the estimate is Equipment Hire (rental only). */
+  equipmentHireOnly: boolean
+  /** PrimeEco estimate id (UUID). */
+  estimateId: string
+  /** The estimate's display label in PrimeEco (its "number"/name). */
+  estimateLabel: string | null
+  /** "Authorised Works" | "Direct Allocation" (the allocations section). */
+  estimateType: string | null
+  /** The estimate's line items — the full "inside" detail. */
+  lines: EstimateLine[]
+}
+
+/** One line item of an authorised estimate (scope detail for coordinators). */
+export interface EstimateLine {
+  trade: string
+  /** The scope text, e.g. "Technician Hours - Standard Rate\n<works detail>". */
+  description: string
+  /** Estimator guidance notes, when present. */
+  notes: string | null
+  labourQuantity: number
+  labourUnit: string | null
+  materialQuantity: number
+  materialUnit: string | null
+  /** Labour role when this is a labour-time line (Technician / PM / …). */
+  role: string | null
 }
 
 /** An approved job (authorised estimate) with its scheduling state. */
@@ -38,6 +73,22 @@ export interface ApprovedJob {
    * days reported separately. Null when no labour lines were found.
    */
   estHours: JobEstimateHours | null
+  /** PrimeEco job type (Makesafe, Job, Quote, Restoration, …). */
+  jobType: string | null
+  /** Formatted site address. */
+  address: string | null
+  /** The job's works-requested / incident description. */
+  jobDescription: string | null
+  /** Deep link into PrimeEco for this job. */
+  primeUrl: string | null
+  /** PrimeEco estimate id — unique row key (a job can have several). */
+  estimateId: string
+  /** The estimate's display label in PrimeEco (its "number"/name). */
+  estimateLabel: string | null
+  /** "Authorised Works" | "Direct Allocation" (the allocations section). */
+  estimateType: string | null
+  /** The estimate's line items — full scope detail for the drill-down. */
+  lines: EstimateLine[]
 }
 
 /** One appointment-type row: how many upcoming, split draft vs confirmed. */

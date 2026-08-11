@@ -98,6 +98,14 @@ export interface DashboardJob {
   updatedAt: string | null
   /** Days since the job was created (for aging). */
   ageDays: number | null
+  /** PrimeEco job type name (Makesafe, Job, Quote, Restoration, …). */
+  jobType: string | null
+  /** Formatted site address ("22 Sandpiper St, Cairnlea VIC 3023"). */
+  address: string | null
+  /** Works-requested / incident description text. */
+  description: string | null
+  /** Deep link into PrimeEco for this job. */
+  primeUrl: string | null
 }
 
 export interface StatusBreakdownItem {

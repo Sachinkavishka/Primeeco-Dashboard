@@ -5,8 +5,11 @@ import {
   AlertTriangle,
   CalendarCheck,
   CalendarClock,
+  ChevronDown,
   Clock,
+  ExternalLink,
   FileText,
+  MapPin,
   UserCheck,
   Users,
 } from "lucide-react"
@@ -87,63 +90,22 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
 
       {/* Row: recently approved + needs scheduling */}
       <div className="mt-5 grid grid-cols-1 gap-5 lg:grid-cols-2">
-        <Panel title="Recently Approved" subtitle="authorised estimates · last 14 days">
-          <ul className="max-h-[360px] space-y-2 overflow-auto">
+        <Panel title="Recently Approved" subtitle={approvalSubtitle(data.approvals)}>
+          <ul className="max-h-[420px] space-y-2 overflow-auto">
             {data.approvals.length === 0 && <li className="text-sm text-slate-400">No recent approvals</li>}
             {data.approvals.map((a) => (
-              <li
-                key={a.jobId}
-                className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900">{a.jobNumber}</span>
-                    {a.scheduled ? (
-                      <Chip tone="emerald">scheduled {a.firstShiftAt ? `· ${fmtDate(a.firstShiftAt)}` : ""}</Chip>
-                    ) : (
-                      <Chip tone="rose">needs booking</Chip>
-                    )}
-                  </div>
-                  <div className="truncate text-xs text-slate-500">
-                    {a.client} · {a.division}
-                  </div>
-                  <HoursChips est={a.estHours} />
-                </div>
-                <div className="shrink-0 text-right">
-                  {data.showValues && (
-                    <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
-                  )}
-                  <div className="text-xs text-slate-400">{fmtDate(a.approvedAt)}</div>
-                </div>
-              </li>
+              <ApprovalRow key={a.estimateId} a={a} showValues={data.showValues} tone="plain" />
             ))}
           </ul>
         </Panel>
 
         <Panel title="Needs Scheduling" subtitle="approved but no appointment booked yet" className="ring-1 ring-rose-100">
-          <ul className="max-h-[360px] space-y-2 overflow-auto">
+          <ul className="max-h-[420px] space-y-2 overflow-auto">
             {data.needsScheduling.length === 0 && (
               <li className="text-sm text-emerald-600">🎉 Everything approved is on the roster.</li>
             )}
             {data.needsScheduling.map((a) => (
-              <li
-                key={a.jobId}
-                className="flex items-center justify-between gap-3 rounded-xl bg-rose-50/60 px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <span className="font-semibold text-slate-900">{a.jobNumber}</span>
-                  <div className="truncate text-xs text-slate-500">
-                    {a.client} · {a.division} · {a.estimator}
-                  </div>
-                  <HoursChips est={a.estHours} />
-                </div>
-                <div className="shrink-0 text-right">
-                  {data.showValues && (
-                    <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
-                  )}
-                  <div className="text-xs text-slate-400">approved {fmtDate(a.approvedAt)}</div>
-                </div>
-              </li>
+              <ApprovalRow key={a.estimateId} a={a} showValues={data.showValues} tone="rose" />
             ))}
           </ul>
         </Panel>
@@ -399,6 +361,112 @@ function EstimatedLabourTable({ approvals }: { approvals: ApprovedJob[] }) {
 
 /* ---- small building blocks ---- */
 
+/** Panel subtitle with the two estimate categories counted. */
+function approvalSubtitle(rows: ApprovedJob[]): string {
+  const aw = rows.filter((a) => /authorised\s*works/i.test(a.estimateType ?? "")).length
+  const da = rows.filter((a) => /direct\s*allocation/i.test(a.estimateType ?? "")).length
+  const untyped = rows.length - aw - da
+  const parts = [`${aw} authorised works`, `${da} direct allocation`]
+  if (untyped > 0) parts.push(`${untyped} loading type…`)
+  return `open jobs · last 14 days · ${parts.join(" · ")}`
+}
+
+/**
+ * One approval row: click to expand the full detail — estimate label/type,
+ * job type, site address, works description and every estimate line (scope).
+ */
+function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: boolean; tone: "plain" | "rose" }) {
+  const [open, setOpen] = useState(false)
+  const shell = tone === "rose" ? "bg-rose-50/60" : "border border-slate-100"
+  const isDA = /direct\s*allocation/i.test(a.estimateType ?? "")
+  return (
+    <li className={`rounded-xl ${shell}`}>
+      <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-semibold text-slate-900">{a.jobNumber}</span>
+            {a.estimateType && <Chip tone={isDA ? "violet" : "blue"}>{a.estimateType}</Chip>}
+            {a.jobType && <Chip tone="slate">{a.jobType}</Chip>}
+            {a.scheduled ? (
+              <Chip tone="emerald">scheduled {a.firstShiftAt ? `· ${fmtDate(a.firstShiftAt)}` : ""}</Chip>
+            ) : (
+              <Chip tone="rose">needs booking</Chip>
+            )}
+          </div>
+          <div className="truncate text-xs text-slate-500">
+            {a.client} · {a.division} · {a.estimator}
+            {a.estimateLabel ? ` · ${a.estimateLabel}` : ""}
+          </div>
+          <HoursChips est={a.estHours} />
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="text-right">
+            {showValues && (
+              <div className="text-sm font-bold tabular-nums text-slate-900">{fmtMoneyCompact(a.valueExGst)}</div>
+            )}
+            <div className="text-xs text-slate-400">{fmtDate(a.approvedAt)}</div>
+          </div>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${open ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+
+      {open && (
+        <div className="border-t border-slate-100 px-3 py-3 text-sm">
+          {a.address && (
+            <div className="mb-1.5 flex items-start gap-1.5 text-slate-600">
+              <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />
+              <span>{a.address}</span>
+            </div>
+          )}
+          {a.jobDescription && (
+            <div className="mb-2 max-h-32 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-50 p-2 text-xs text-slate-600">
+              {a.jobDescription}
+            </div>
+          )}
+
+          <div className="mb-1 text-xs font-bold uppercase tracking-wide text-slate-400">
+            Estimate lines ({a.lines.length})
+          </div>
+          <ul className="max-h-64 space-y-1.5 overflow-auto">
+            {a.lines.length === 0 && <li className="text-xs text-slate-400">Line detail still loading…</li>}
+            {a.lines.map((l, i) => (
+              <li key={i} className="rounded-lg border border-slate-100 p-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Chip tone="slate">{l.trade}</Chip>
+                  {l.role && <Chip tone="teal">{l.role}</Chip>}
+                  {l.labourQuantity > 0 && l.labourUnit && (
+                    <span className="text-xs font-semibold tabular-nums text-slate-700">
+                      {l.labourQuantity} {l.labourUnit}
+                    </span>
+                  )}
+                  {l.materialQuantity > 0 && l.materialUnit && (
+                    <span className="text-xs tabular-nums text-slate-500">
+                      {l.materialQuantity} {l.materialUnit}
+                    </span>
+                  )}
+                </div>
+                <div className="mt-1 whitespace-pre-wrap text-xs text-slate-600">{l.description}</div>
+                {l.notes && <div className="mt-1 text-[11px] italic text-slate-400">{l.notes}</div>}
+              </li>
+            ))}
+          </ul>
+
+          {a.primeUrl && (
+            <a
+              href={a.primeUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-teal-600 hover:underline"
+            >
+              Open in PrimeEco <ExternalLink className="h-3 w-3" />
+            </a>
+          )}
+        </div>
+      )}
+    </li>
+  )
+}
+
 function ShiftCard({ shift }: { shift: Shift }) {
   const tone = shift.open ? "border-rose-200 bg-rose-50" : shift.status === "draft" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
   return (
@@ -424,6 +492,10 @@ const CHIP_TONES = {
   emerald: "bg-emerald-100 text-emerald-700",
   rose: "bg-rose-100 text-rose-700",
   amber: "bg-amber-100 text-amber-700",
+  blue: "bg-blue-100 text-blue-700",
+  violet: "bg-violet-100 text-violet-700",
+  slate: "bg-slate-100 text-slate-600",
+  teal: "bg-teal-100 text-teal-700",
 } as const
 
 function Chip({ tone, children }: { tone: keyof typeof CHIP_TONES; children: React.ReactNode }) {

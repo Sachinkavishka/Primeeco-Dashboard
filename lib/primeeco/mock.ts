@@ -77,6 +77,10 @@ export function getMockJobs(count = 128): DashboardJob[] {
       createdAt,
       updatedAt: new Date(now - Math.floor(rng() * ageDays) * 86_400_000).toISOString(),
       ageDays,
+      jobType: pick(rng, ["Job", "Makesafe", "Restoration", "Quote"]),
+      address: `${10 + Math.floor(rng() * 90)} Sample St, Melbourne VIC 3000`,
+      description: "Works Requested:\nSample scope of works for the mock job.",
+      primeUrl: null,
     } satisfies DashboardJob
   })
 }

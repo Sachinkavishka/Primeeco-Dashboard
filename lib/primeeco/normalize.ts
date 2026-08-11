@@ -52,6 +52,16 @@ function resolve(id: unknown, map: Map<string, string>): string | null {
   return key ? map.get(key) ?? null : null
 }
 
+/** Jobs carry address as {addressLine1, suburb, state, postcode, …}. */
+function formatAddress(value: unknown): string | null {
+  if (!value || typeof value !== "object") return toStr(value)
+  const a = value as Record<string, unknown>
+  const line = [toStr(a.addressLine1), toStr(a.addressLine2)].filter(Boolean).join(" ")
+  const locality = [toStr(a.suburb), toStr(a.state), toStr(a.postcode)].filter(Boolean).join(" ")
+  const parts = [line, locality].filter(Boolean)
+  return parts.length ? parts.join(", ") : null
+}
+
 export function normalizeJob(raw: RawJob, lookups: Lookups): DashboardJob {
   const f = flatten(raw)
 
@@ -82,5 +92,9 @@ export function normalizeJob(raw: RawJob, lookups: Lookups): DashboardJob {
     createdAt,
     updatedAt: toIsoOrNull(f.updatedAt),
     ageDays: daysSince(createdAt),
+    jobType: toStr(f.jobType),
+    address: formatAddress(f.address),
+    description: toStr(f.description),
+    primeUrl: toStr(f.primeUrl),
   }
 }

@@ -30,6 +30,37 @@ export function getMockApprovals(): ApprovalSource[] {
       division: DIVISIONS[i % DIVISIONS.length],
       // Spread approvals across the last ~12 days.
       createdAt: new Date(now - i * 1.4 * 86_400_000).toISOString(),
+      statusType: "Open",
+      jobType: ["Job", "Makesafe", "Restoration"][i % 3],
+      address: `${10 + i * 7} Sample St, Melbourne VIC 3000`,
+      jobDescription: "Works Requested:\nWater damage restoration — dry out and reinstate affected areas.",
+      primeUrl: null,
+      equipmentHireOnly: false,
+      estimateId: `mock-est-${i}`,
+      estimateLabel: i % 2 === 0 ? "Authorised Works" : `Variation ${i}`,
+      estimateType: i % 3 === 0 ? "Direct Allocation" : "Authorised Works",
+      lines: [
+        {
+          trade: "Labour",
+          description: "Technician Hours - Standard Rate\nRemove wet carpet and underlay, treat affected areas.",
+          notes: null,
+          labourQuantity: 8,
+          labourUnit: "hr",
+          materialQuantity: 0,
+          materialUnit: null,
+          role: "Technician",
+        },
+        {
+          trade: "Chemicals/Consumables",
+          description: "Antimicrobial treatment - all affected areas",
+          notes: null,
+          labourQuantity: 0,
+          labourUnit: null,
+          materialQuantity: 2,
+          materialUnit: "litre",
+          role: null,
+        },
+      ],
     })
   }
   return rows
