@@ -387,11 +387,14 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
             <span className="font-semibold text-slate-900">{a.jobNumber}</span>
             {a.estimateType && <Chip tone={isDA ? "violet" : "blue"}>{a.estimateType}</Chip>}
             {a.jobType && <Chip tone="slate">{a.jobType}</Chip>}
-            {a.scheduled ? (
+            {a.invoiced && !a.invoiced.progress ? (
+              <Chip tone="emerald">✓ invoiced · works done</Chip>
+            ) : a.scheduled ? (
               <Chip tone="emerald">scheduled {a.firstShiftAt ? `· ${fmtDate(a.firstShiftAt)}` : ""}</Chip>
             ) : (
               <Chip tone="rose">needs booking</Chip>
             )}
+            {a.invoiced?.progress && <Chip tone="amber">progress invoiced</Chip>}
           </div>
           <div className="truncate text-xs text-slate-500">
             {a.client} · {a.division} · {a.estimator}
@@ -412,6 +415,12 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
 
       {open && (
         <div className="border-t border-slate-100 px-3 py-3 text-sm">
+          {a.invoiced && (
+            <div className="mb-1.5 text-xs text-emerald-700">
+              Invoice {a.invoiced.invoiceNumber} · {a.invoiced.invoicedDate ?? "—"} · {a.invoiced.status}
+              {a.invoiced.progress ? " · progress payment" : ""}
+            </div>
+          )}
           {a.address && (
             <div className="mb-1.5 flex items-start gap-1.5 text-slate-600">
               <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-400" />

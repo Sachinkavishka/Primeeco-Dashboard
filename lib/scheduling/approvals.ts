@@ -10,7 +10,9 @@ import {
 } from "@/lib/primeeco/estimate-hours"
 import { isPrimeecoConfigured } from "@/lib/primeeco/config"
 import { getDashboardData } from "@/lib/primeeco"
-import type { ApprovalSource, EstimateLine } from "./types"
+import { getArInvoiceIndex } from "@/lib/primeeco/receivables"
+import type { ArInvoiceFact } from "@/lib/primeeco/receivables"
+import type { ApprovalSource, EstimateLine, InvoicedInfo } from "./types"
 
 /**
  * Recent approvals for the scheduling board, DERIVED from the estimate line
@@ -144,17 +146,43 @@ function toLine(a: Record<string, unknown>): EstimateLine {
   }
 }
 
+/**
+ * Was this approval's work already invoiced? Invoices don't reference the
+ * estimate, so we match on the JOB: an invoice dated on/after the approval
+ * date is taken as billing for these works (Direct Allocations often invoice
+ * the same day). Prefers a full/final invoice over a progress payment.
+ */
+function findInvoice(
+  invoices: ArInvoiceFact[] | undefined,
+  approvedAt: string | null,
+): InvoicedInfo | null {
+  if (!invoices?.length || !approvedAt) return null
+  const approvedDay = approvedAt.slice(0, 10)
+  const after = invoices.filter((inv) => inv.invoicedDate !== null && inv.invoicedDate >= approvedDay)
+  if (after.length === 0) return null
+  const final = after.find((inv) => inv.progressPct >= 1)
+  const pick = final ?? after[0]
+  return {
+    invoiceNumber: pick.invoiceNumber,
+    invoicedDate: pick.invoicedDate,
+    status: pick.status,
+    paid: pick.paid,
+    progress: pick.progressPct < 1,
+  }
+}
+
 let lastGood: RecentApprovals | null = null
 
 export async function getRecentApprovals(): Promise<RecentApprovals> {
   if (!isPrimeecoConfigured()) return { live: false, rows: [], complete: true }
 
   try {
-    // Jobs are enrichment (number/client/division/type/address) — reuse the
-    // dashboard's cached fetch and tolerate its failure.
-    const [{ items, complete: itemsComplete }, dashRes] = await Promise.all([
+    // Jobs and invoices are enrichment — reuse their cached fetches and
+    // tolerate failure of either without losing the approvals list.
+    const [{ items, complete: itemsComplete }, dashRes, invoiceIndex] = await Promise.all([
       fetchRecentItems(),
       getDashboardData().catch(() => null),
+      getArInvoiceIndex().catch(() => null),
     ])
     const jobById = new Map((dashRes?.jobs ?? []).map((j) => [j.id, j]))
 
@@ -216,6 +244,7 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         estimateId: e.estimateId,
         estimateLabel: meta?.label ?? null,
         estimateType: meta?.estimateType ?? null,
+        invoiced: findInvoice(invoiceIndex?.get(e.jobId), e.createdAt),
         lines: e.lines,
       }
     })

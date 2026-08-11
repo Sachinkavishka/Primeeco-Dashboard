@@ -81,6 +81,47 @@ const getCachedAr = unstable_cache(fetchAr, ["primeeco-ar-invoices-v1"], {
   tags: ["primeeco-receivables"],
 })
 
+/** Minimal invoice facts for joining invoices to jobs/estimates elsewhere. */
+export interface ArInvoiceFact {
+  jobId: string
+  invoiceNumber: string
+  status: string
+  paid: boolean
+  /** Date-only (YYYY-MM-DD). */
+  invoicedDate: string | null
+  /** 1 = full/final invoice, <1 = progress payment. */
+  progressPct: number
+}
+
+/**
+ * jobId → its AR invoices (Draft/Cancelled excluded), reusing the same cached
+ * fetch as the /receivables page. Used by the scheduling board to flag
+ * approved estimates whose works are already invoiced (= completed).
+ */
+export async function getArInvoiceIndex(): Promise<Map<string, ArInvoiceFact[]>> {
+  const raw = await getCachedAr()
+  const index = new Map<string, ArInvoiceFact[]>()
+  for (const row of raw ?? []) {
+    const a = row.attributes ?? {}
+    const status = str(a.accountsReceivableInvoiceStatus) ?? "Unknown"
+    if (EXCLUDED.has(status)) continue
+    const jobId = str(a.jobId)
+    if (!jobId) continue
+    const fact: ArInvoiceFact = {
+      jobId,
+      invoiceNumber: str(a.invoiceNumber) ?? "—",
+      status,
+      paid: status === "Paid",
+      invoicedDate: dateOnly(a.invoicedDate),
+      progressPct: num(a.progressPaymentPercentage) || 1,
+    }
+    const list = index.get(jobId) ?? []
+    list.push(fact)
+    index.set(jobId, list)
+  }
+  return index
+}
+
 export async function getReceivablesData(): Promise<ReceivablesData> {
   // Fetch invoices and the job data concurrently. The money figures come from
   // the invoices alone, so a slow/failed job fetch never blocks them — it only

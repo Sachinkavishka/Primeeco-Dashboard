@@ -34,8 +34,26 @@ export interface ApprovalSource {
   estimateLabel: string | null
   /** "Authorised Works" | "Direct Allocation" (the allocations section). */
   estimateType: string | null
+  /**
+   * Set when the job has an AR invoice dated on/after this approval —
+   * invoiced means the works are already completed, so the estimate doesn't
+   * need scheduling.
+   */
+  invoiced: InvoicedInfo | null
   /** The estimate's line items — the full "inside" detail. */
   lines: EstimateLine[]
+}
+
+/** Invoice evidence that an approved estimate's works are done. */
+export interface InvoicedInfo {
+  invoiceNumber: string
+  /** Date-only (YYYY-MM-DD). */
+  invoicedDate: string | null
+  /** AR status (Sent/Pending/Approved/Paid). */
+  status: string
+  paid: boolean
+  /** True when it's a progress payment (<100%), not the final invoice. */
+  progress: boolean
 }
 
 /** One line item of an authorised estimate (scope detail for coordinators). */
@@ -87,6 +105,8 @@ export interface ApprovedJob {
   estimateLabel: string | null
   /** "Authorised Works" | "Direct Allocation" (the allocations section). */
   estimateType: string | null
+  /** Set when the works are already invoiced (= completed). */
+  invoiced: InvoicedInfo | null
   /** The estimate's line items — full scope detail for the drill-down. */
   lines: EstimateLine[]
 }

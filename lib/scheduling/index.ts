@@ -83,6 +83,7 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
     estimateId: e.estimateId,
     estimateLabel: e.estimateLabel,
     estimateType: e.estimateType,
+    invoiced: e.invoiced,
     lines: e.lines,
   }
 }
@@ -184,7 +185,9 @@ export async function getSchedulingData(): Promise<SchedulingData> {
 
   const recentCutoff = today - RECENT_DAYS * DAY_MS
   const approved7d = approvals.filter((a) => a.approvedAt && new Date(a.approvedAt).getTime() >= recentCutoff).length
-  const needsScheduling = approvals.filter((a) => !a.scheduled)
+  // Fully invoiced works are already completed — nothing left to schedule.
+  // (Progress invoices stay: part of the works may still need a crew.)
+  const needsScheduling = approvals.filter((a) => !a.scheduled && !(a.invoiced && !a.invoiced.progress))
 
   const upcomingShifts = shifts.filter((s) => new Date(s.start).getTime() >= today)
   const openShifts = upcomingShifts.filter((s) => s.open).sort((a, b) => a.start.localeCompare(b.start))

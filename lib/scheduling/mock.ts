@@ -39,6 +39,12 @@ export function getMockApprovals(): ApprovalSource[] {
       estimateId: `mock-est-${i}`,
       estimateLabel: i % 2 === 0 ? "Authorised Works" : `Variation ${i}`,
       estimateType: i % 3 === 0 ? "Direct Allocation" : "Authorised Works",
+      invoiced:
+        i === 4
+          ? { invoiceNumber: "INV-2041", invoicedDate: new Date(now - 86_400_000).toISOString().slice(0, 10), status: "Paid", paid: true, progress: false }
+          : i === 6
+            ? { invoiceNumber: "INV-2044", invoicedDate: new Date(now).toISOString().slice(0, 10), status: "Sent", paid: false, progress: true }
+            : null,
       lines: [
         {
           trade: "Labour",
