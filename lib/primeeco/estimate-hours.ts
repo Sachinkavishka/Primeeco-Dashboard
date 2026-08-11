@@ -121,8 +121,13 @@ const getCachedPage = unstable_cache(fetchPage, ["primeeco-estimate-items-page-v
  * covered, the cap is hit, or the per-request time budget runs out (cached
  * pages are ~free, so budget effectively applies to uncached fetches only).
  * Items older than the window are discarded.
+ *
+ * Exported so the scheduling board's approvals derive from the SAME cached
+ * pages (each line carries estimateId/jobId/createdAt/createdBy and its
+ * money totals) — /estimates-snapshot itself proved too slow (13–90s/page)
+ * to call from a serverless function at all.
  */
-async function fetchRecentItems(): Promise<{ items: Array<Record<string, unknown>>; complete: boolean }> {
+export async function fetchRecentItems(): Promise<{ items: Array<Record<string, unknown>>; complete: boolean }> {
   const started = Date.now()
   const cutoff = started - WINDOW_DAYS * 86_400_000
   const out: Array<Record<string, unknown>> = []

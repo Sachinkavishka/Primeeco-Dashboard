@@ -2,8 +2,8 @@ import "server-only"
 import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
 import type { Shift } from "@/lib/connecteam/types"
-import { getEstimatesData } from "@/lib/primeeco/estimates"
 import { getEstimateHours } from "@/lib/primeeco/estimate-hours"
+import { getRecentApprovals } from "./approvals"
 import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { getMockApprovals, getMockHours } from "./mock"
 import type { ApprovalSource, ApprovedJob, DayColumn, SchedulingData, TechAvailability, TypeBucket } from "./types"
@@ -146,7 +146,7 @@ function buildAvailability(shifts: Shift[], users: { id: string; name: string }[
 }
 
 export async function getSchedulingData(): Promise<SchedulingData> {
-  const [est, roster, hoursRes] = await Promise.all([getEstimatesData(), getRoster(), getEstimateHours()])
+  const [apr, roster, hoursRes] = await Promise.all([getRecentApprovals(), getRoster(), getEstimateHours()])
 
   const shifts = roster.shifts
   const today = startOfToday()
@@ -154,8 +154,8 @@ export async function getSchedulingData(): Promise<SchedulingData> {
 
   // When PrimeEco isn't configured, populate the SAMPLE board with mock
   // approvals so the join demonstrates (matches Operations' mock behaviour).
-  const usingMockApprovals = !est.live && est.estimates.length === 0
-  const estimateRows: ApprovalSource[] = usingMockApprovals ? getMockApprovals() : est.estimates
+  const usingMockApprovals = !apr.live && apr.rows.length === 0
+  const estimateRows: ApprovalSource[] = usingMockApprovals ? getMockApprovals() : apr.rows
   // Estimated labour hours per job — mock hours accompany mock approvals so the
   // SAMPLE board demonstrates the feature end-to-end.
   const hoursByJob = usingMockApprovals ? getMockHours() : hoursRes.byJob
@@ -184,16 +184,16 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   const mask = (a: ApprovedJob): ApprovedJob => (showValues ? a : { ...a, valueExGst: 0 })
 
   return {
-    live: est.live && roster.live,
-    primeecoLive: est.live,
+    live: apr.live && roster.live,
+    primeecoLive: apr.live,
     connecteamLive: roster.live,
     generatedAt: new Date().toISOString(),
     showValues,
-    hoursComplete: usingMockApprovals ? true : hoursRes.complete,
+    hoursComplete: usingMockApprovals ? true : hoursRes.complete && apr.complete,
     // Surface BOTH source errors (they were masking each other), except the
     // PrimeEco "not configured" case on the intentional sample board.
     error:
-      [usingMockApprovals ? undefined : est.error && `PrimeEco: ${est.error}`, roster.error]
+      [usingMockApprovals ? undefined : apr.error && `PrimeEco: ${apr.error}`, roster.error]
         .filter(Boolean)
         .join(" · ") || undefined,
     counts: {
