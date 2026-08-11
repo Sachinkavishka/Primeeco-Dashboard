@@ -46,7 +46,14 @@ let lastGood: Roster | null = null
 export async function getRoster(): Promise<Roster> {
   if (!isConnecteamConfigured()) {
     const { shifts, users } = getMockRoster()
-    return { live: false, shifts, users }
+    // Name the cause explicitly — a silent fallback made prod misconfiguration
+    // (missing/renamed env var) indistinguishable from an API outage.
+    return {
+      live: false,
+      shifts,
+      users,
+      error: "Connecteam: CONNECTEAM_API_KEY env var is not set on this deployment — roster is sample",
+    }
   }
   try {
     const data = await getCachedLive()
@@ -55,7 +62,7 @@ export async function getRoster(): Promise<Roster> {
   } catch (err) {
     if (lastGood) return lastGood
     const { shifts, users } = getMockRoster()
-    const error = err instanceof Error ? err.message : "Unknown error contacting Connecteam"
-    return { live: false, shifts, users, error }
+    const message = err instanceof Error ? err.message : "Unknown error contacting Connecteam"
+    return { live: false, shifts, users, error: `Connecteam: ${message}` }
   }
 }

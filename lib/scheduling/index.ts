@@ -190,8 +190,12 @@ export async function getSchedulingData(): Promise<SchedulingData> {
     generatedAt: new Date().toISOString(),
     showValues,
     hoursComplete: usingMockApprovals ? true : hoursRes.complete,
-    // Don't surface the PrimeEco "not configured" error on the sample board.
-    error: (usingMockApprovals ? undefined : est.error) || roster.error,
+    // Surface BOTH source errors (they were masking each other), except the
+    // PrimeEco "not configured" case on the intentional sample board.
+    error:
+      [usingMockApprovals ? undefined : est.error && `PrimeEco: ${est.error}`, roster.error]
+        .filter(Boolean)
+        .join(" · ") || undefined,
     counts: {
       approved7d,
       unscheduled: needsScheduling.length,
