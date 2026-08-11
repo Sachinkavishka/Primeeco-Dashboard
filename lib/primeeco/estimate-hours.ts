@@ -28,7 +28,7 @@ import { apiFetch } from "./client"
  * instantly for the next 4 hours.
  */
 
-export type HoursRole = "Technician" | "Project Manager" | "Supervisor" | "Labourer" | "Other"
+export type HoursRole = "Technician" | "Project Manager" | "Supervisor" | "Labourer" | "Labour" | "Other"
 
 export interface RoleTime {
   hours: number
@@ -80,12 +80,20 @@ const num = (v: unknown): number => {
 }
 const str = (v: unknown): string => (typeof v === "string" ? v : "")
 
-export function roleOf(description: string): HoursRole {
+/**
+ * Role of a labour-time line. The description is only a hint — estimators
+ * often rewrite it (e.g. into the scope text), which used to dump the line
+ * into "Other". The TRADE is authoritative: any time-line under the Labour
+ * trade that doesn't name a role still counts, bucketed as generic "Labour".
+ * "Other" is reserved for time-lines under non-Labour trades.
+ */
+export function roleOf(description: string, trade?: string): HoursRole {
   const d = description.toLowerCase()
   if (/technician/.test(d)) return "Technician"
   if (/project\s*manager/.test(d)) return "Project Manager"
   if (/supervisor/.test(d)) return "Supervisor"
   if (/labou?rer/.test(d)) return "Labourer"
+  if (/^labour$/i.test((trade ?? "").trim())) return "Labour"
   return "Other"
 }
 
@@ -181,7 +189,7 @@ function aggregate(items: Array<Record<string, unknown>>): Record<string, JobEst
     if (!hr && !isDayUnit(unit)) continue
 
     const job = (byJob[jobId] ??= { jobId, byRole: {}, totalHours: 0, totalDays: 0 })
-    const role = roleOf(str(a.description))
+    const role = roleOf(str(a.description), str(a.trade))
     const bucket = (job.byRole[role] ??= { hours: 0, days: 0 })
     if (hr) {
       bucket.hours += qty

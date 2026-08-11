@@ -237,12 +237,14 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
 
 /* ---- estimated labour ---- */
 
-const ROLE_ORDER: HoursRole[] = ["Technician", "Project Manager", "Supervisor", "Labourer", "Other"]
+const ROLE_ORDER: HoursRole[] = ["Technician", "Project Manager", "Supervisor", "Labourer", "Labour", "Other"]
 const ROLE_SHORT: Record<HoursRole, string> = {
   Technician: "Tech",
   "Project Manager": "PM",
   Supervisor: "Sup",
   Labourer: "Lab",
+  // Labour-trade lines whose description was rewritten (no role keyword).
+  Labour: "Labour",
   Other: "Other",
 }
 
@@ -281,6 +283,7 @@ function EstimatedLabourTable({ approvals }: { approvals: ApprovedJob[] }) {
     "Project Manager": { hours: 0, days: 0 },
     Supervisor: { hours: 0, days: 0 },
     Labourer: { hours: 0, days: 0 },
+    Labour: { hours: 0, days: 0 },
     Other: { hours: 0, days: 0 },
   }
   for (const a of rows) {

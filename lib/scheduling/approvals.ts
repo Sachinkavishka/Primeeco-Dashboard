@@ -142,7 +142,7 @@ function toLine(a: Record<string, unknown>): EstimateLine {
     labourUnit,
     materialQuantity: num(a.materialQuantity),
     materialUnit: str(a.materialUnit) ?? null,
-    role: isTime && !isEquipmentHireTrade(str(a.trade) ?? "") ? roleOf(description) : null,
+    role: isTime && !isEquipmentHireTrade(str(a.trade) ?? "") ? roleOf(description, str(a.trade)) : null,
   }
 }
 
