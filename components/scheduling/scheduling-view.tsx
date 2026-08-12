@@ -13,8 +13,7 @@ import {
   UserCheck,
   Users,
 } from "lucide-react"
-import type { ApprovedJob, SchedulingData } from "@/lib/scheduling/types"
-import type { Shift } from "@/lib/connecteam/types"
+import type { ApprovedJob, CalendarShift, SchedulingData } from "@/lib/scheduling/types"
 import type { HoursRole, JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { fmtDate, fmtMoneyCompact, fmtNumber } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
@@ -204,7 +203,10 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
               <ul className="space-y-1.5">
                 {data.openShifts.slice(0, 6).map((s) => (
                   <li key={s.id} className="flex items-center justify-between rounded-lg bg-rose-50/60 px-2.5 py-1.5">
-                    <span className="truncate text-sm text-slate-700" title={s.title}>{s.title}</span>
+                    <span className="truncate text-sm text-slate-700" title={s.title}>
+                      {s.jobNumber && <span className="font-semibold">{s.jobNumber} · </span>}
+                      {s.type}
+                    </span>
                     <span className="shrink-0 text-xs text-slate-400">{dayName(s.start)} {hm(s.start)}</span>
                   </li>
                 ))}
@@ -492,8 +494,11 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
   )
 }
 
-function ShiftCard({ shift }: { shift: Shift }) {
+function ShiftCard({ shift }: { shift: CalendarShift }) {
   const tone = shift.open ? "border-rose-200 bg-rose-50" : shift.status === "draft" ? "border-amber-200 bg-amber-50" : "border-slate-200 bg-white"
+  // Connecteam titles are often blank (the normalizer falls back to the site
+  // address or the type) — only show it when it adds something.
+  const title = shift.title && shift.title !== shift.type ? shift.title : null
   return (
     <li className={`rounded-lg border px-2 py-1.5 ${tone}`}>
       <div className="flex items-center justify-between gap-2">
@@ -503,9 +508,18 @@ function ShiftCard({ shift }: { shift: Shift }) {
           {shift.open && <Chip tone="rose">open</Chip>}
         </div>
       </div>
-      <div className="truncate text-xs font-medium text-slate-800" title={shift.title}>
-        {shift.type}
-      </div>
+      {shift.jobNumber && (
+        <div className="truncate text-xs font-bold text-slate-900" title={shift.client ?? undefined}>
+          {shift.jobNumber}
+          {shift.client && <span className="font-normal text-slate-400"> · {shift.client}</span>}
+        </div>
+      )}
+      <div className="truncate text-xs font-medium text-slate-700">{shift.type}</div>
+      {title && (
+        <div className="truncate text-[11px] text-slate-500" title={title}>
+          {title}
+        </div>
+      )}
       <div className="truncate text-[11px] text-slate-400">
         {shift.open ? "unassigned" : shift.userNames.join(", ")}
       </div>

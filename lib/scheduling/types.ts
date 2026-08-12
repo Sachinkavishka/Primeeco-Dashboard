@@ -140,13 +140,25 @@ export interface TypeBucket {
   confirmed: number
 }
 
+/**
+ * A roster shift enriched with the PrimeEco job it belongs to. Connecteam's
+ * `jobId` IS the PrimeEco job UUID (the systems are synced), so the calendar
+ * can show the job number and client alongside the appointment.
+ */
+export interface CalendarShift extends Shift {
+  /** PrimeEco job number, when the shift is linked to a known job. */
+  jobNumber: string | null
+  /** Client name from the job. */
+  client: string | null
+}
+
 /** A single day column in the week strip. */
 export interface DayColumn {
   /** ISO date (midnight) for the day. */
   date: string
   /** Short label, e.g. "Mon 11". */
   label: string
-  shifts: Shift[]
+  shifts: CalendarShift[]
 }
 
 /** A technician's availability snapshot for today. */
@@ -196,5 +208,5 @@ export interface SchedulingData {
   /** Technician availability for today. */
   availability: TechAvailability[]
   /** Unassigned (open) shifts that still need someone. */
-  openShifts: Shift[]
+  openShifts: CalendarShift[]
 }

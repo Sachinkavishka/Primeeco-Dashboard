@@ -3,10 +3,19 @@ import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
 import type { Shift } from "@/lib/connecteam/types"
 import { getEstimateHours } from "@/lib/primeeco/estimate-hours"
+import { getDashboardData } from "@/lib/primeeco"
 import { getRecentApprovals } from "./approvals"
 import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { getMockApprovals, getMockHours } from "./mock"
-import type { ApprovalSource, ApprovedJob, DayColumn, SchedulingData, TechAvailability, TypeBucket } from "./types"
+import type {
+  ApprovalSource,
+  ApprovedJob,
+  CalendarShift,
+  DayColumn,
+  SchedulingData,
+  TechAvailability,
+  TypeBucket,
+} from "./types"
 
 /**
  * Scheduling facade. Joins two systems for the coordinator view:
@@ -100,7 +109,25 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
   }
 }
 
-function buildWeek(shifts: Shift[]): DayColumn[] {
+/** Job facts the calendar shows on a shift card. */
+interface JobFact {
+  jobNumber: string
+  client: string | null
+}
+
+/**
+ * Attach the PrimeEco job number/client to each roster shift. Connecteam's
+ * `jobId` is the PrimeEco job UUID, so this is an exact lookup; shifts with no
+ * (or an unknown) job simply carry nulls.
+ */
+function toCalendarShifts(shifts: Shift[], jobs: Map<string, JobFact>): CalendarShift[] {
+  return shifts.map((s) => {
+    const job = s.ctJobId ? jobs.get(s.ctJobId) : undefined
+    return { ...s, jobNumber: job?.jobNumber ?? null, client: job?.client ?? null }
+  })
+}
+
+function buildWeek(shifts: CalendarShift[]): DayColumn[] {
   const today = startOfToday()
   const cols: DayColumn[] = []
   for (let i = 0; i < 7; i++) {
@@ -167,9 +194,19 @@ function buildAvailability(shifts: Shift[], users: { id: string; name: string }[
 }
 
 export async function getSchedulingData(): Promise<SchedulingData> {
-  const [apr, roster, hoursRes] = await Promise.all([getRecentApprovals(), getRoster(), getEstimateHours()])
+  // The jobs fetch is cached and shared with the approvals path — it only
+  // enriches the calendar with job numbers, so its failure is tolerated.
+  const [apr, roster, hoursRes, dashRes] = await Promise.all([
+    getRecentApprovals(),
+    getRoster(),
+    getEstimateHours(),
+    getDashboardData().catch(() => null),
+  ])
 
-  const shifts = roster.shifts
+  const jobFacts = new Map<string, JobFact>(
+    (dashRes?.jobs ?? []).map((j) => [j.id, { jobNumber: j.jobNumber, client: j.client }]),
+  )
+  const shifts = toCalendarShifts(roster.shifts, jobFacts)
   const today = startOfToday()
   const windowStart = today - APPROVAL_WINDOW_DAYS * DAY_MS
 
