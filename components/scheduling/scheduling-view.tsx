@@ -364,14 +364,10 @@ function EstimatedLabourTable({ approvals }: { approvals: ApprovedJob[] }) {
 
 /* ---- small building blocks ---- */
 
-/** Panel subtitle with the two estimate categories counted. */
+/** Panel subtitle — the board shows Authorised Works on open jobs only. */
 function approvalSubtitle(rows: ApprovedJob[]): string {
-  const aw = rows.filter((a) => /authorised\s*works/i.test(a.estimateType ?? "")).length
-  const da = rows.filter((a) => /direct\s*allocation/i.test(a.estimateType ?? "")).length
-  const untyped = rows.length - aw - da
-  const parts = [`${aw} authorised works`, `${da} direct allocation`]
-  if (untyped > 0) parts.push(`${untyped} loading type…`)
-  return `open jobs · last 14 days · ${parts.join(" · ")}`
+  const scheduled = rows.filter((a) => a.scheduled).length
+  return `${rows.length} authorised works · open jobs · last 14 days · ${scheduled} scheduled`
 }
 
 /**
@@ -381,14 +377,12 @@ function approvalSubtitle(rows: ApprovedJob[]): string {
 function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: boolean; tone: "plain" | "rose" }) {
   const [open, setOpen] = useState(false)
   const shell = tone === "rose" ? "bg-rose-50/60" : "border border-slate-100"
-  const isDA = /direct\s*allocation/i.test(a.estimateType ?? "")
   return (
     <li className={`rounded-xl ${shell}`}>
       <button type="button" onClick={() => setOpen((v) => !v)} className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-semibold text-slate-900">{a.jobNumber}</span>
-            {a.estimateType && <Chip tone={isDA ? "violet" : "blue"}>{a.estimateType}</Chip>}
             {a.jobType && <Chip tone="slate">{a.jobType}</Chip>}
             {a.invoiced && !a.invoiced.progress ? (
               <Chip tone="emerald">✓ invoiced · works done</Chip>

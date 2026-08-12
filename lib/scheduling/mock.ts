@@ -38,7 +38,9 @@ export function getMockApprovals(): ApprovalSource[] {
       equipmentHireOnly: false,
       estimateId: `mock-est-${i}`,
       estimateLabel: i % 2 === 0 ? "Authorised Works" : `Variation ${i}`,
-      estimateType: i % 3 === 0 ? "Direct Allocation" : "Authorised Works",
+      // Direct Allocations are filtered off the board, so the sample only
+      // carries the type coordinators actually plan from.
+      estimateType: "Authorised Works",
       invoiced:
         i === 4
           ? { invoiceNumber: "INV-2041", invoicedDate: new Date(now - 86_400_000).toISOString().slice(0, 10), status: "Paid", paid: true, progress: false }

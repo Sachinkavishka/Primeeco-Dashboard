@@ -25,6 +25,13 @@ const RECENT_DAYS = 7
 const APPROVED_STATUS = /authoris|approved/i
 
 /**
+ * Direct Allocations are the allocations section (work sent straight to a
+ * supplier/subcontractor), not works our own crews schedule. Coordinators plan
+ * from Authorised Works only — estimates, quotes and scope-of-works approvals.
+ */
+const DIRECT_ALLOCATION = /direct\s*allocation/i
+
+/**
  * Job $ values are financial data (management-only, per the finance-tab rule),
  * so we only expose them when the management passcode is unlocked — same
  * httpOnly `dfm_fin` cookie the finance pages gate on. When locked, values are
@@ -176,6 +183,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   // dropped) and no equipment-hire-only estimates (rental periods, not works).
   const approvals: ApprovedJob[] = estimateRows
     .filter((e) => APPROVED_STATUS.test(e.status))
+    .filter((e) => !DIRECT_ALLOCATION.test(e.estimateType ?? ""))
     .filter((e) => e.statusType !== "Closed")
     .filter((e) => !e.equipmentHireOnly)
     .filter((e) => {
