@@ -104,12 +104,17 @@ async function fetchEstimateMeta(estimateId: string): Promise<EstimateMeta> {
   }
 }
 
-/** Per-estimate meta through the Data Cache (estimateId is in the cache key).
- *  v2: cache-key bump — v1 entries were cached without estimateStatus. */
-const getCachedMeta = unstable_cache(fetchEstimateMeta, ["primeeco-estimate-meta-v2"], {
-  revalidate: 4 * 60 * 60,
-  tags: ["primeeco-estimate-meta"],
-})
+/**
+ * Per-estimate meta through the Data Cache. The snapshot `version` is part of
+ * the cache key (unstable_cache keys include the arguments), so re-authorising
+ * an estimate — which re-snapshots it with a new version — misses the cache and
+ * refetches immediately, while unchanged estimates stay cheap.
+ */
+const getCachedMeta = unstable_cache(
+  (estimateId: string, _version: number) => fetchEstimateMeta(estimateId),
+  ["primeeco-estimate-meta-v3"],
+  { revalidate: 60 * 60, tags: ["primeeco-estimate-meta"] },
+)
 
 const META_BATCH = 4
 const META_BUDGET_MS = 2_500
@@ -119,7 +124,9 @@ const META_BUDGET_MS = 2_500
  * ids are ~free; uncached ones fill over successive polls. Returns whatever is
  * known plus whether everything was covered.
  */
-async function fetchMetas(ids: string[]): Promise<{ metas: Map<string, EstimateMeta>; complete: boolean }> {
+async function fetchMetas(
+  ids: ReadonlyArray<readonly [string, number]>,
+): Promise<{ metas: Map<string, EstimateMeta>; complete: boolean }> {
   const started = Date.now()
   const metas = new Map<string, EstimateMeta>()
   let complete = true
@@ -129,9 +136,9 @@ async function fetchMetas(ids: string[]): Promise<{ metas: Map<string, EstimateM
       break
     }
     const batch = ids.slice(i, i + META_BATCH)
-    const settled = await Promise.allSettled(batch.map((id) => getCachedMeta(id)))
+    const settled = await Promise.allSettled(batch.map(([id, version]) => getCachedMeta(id, version)))
     settled.forEach((res, idx) => {
-      if (res.status === "fulfilled") metas.set(batch[idx], res.value)
+      if (res.status === "fulfilled") metas.set(batch[idx][0], res.value)
       else complete = false
     })
   }
@@ -143,12 +150,16 @@ async function fetchMetas(ids: string[]): Promise<{ metas: Map<string, EstimateM
 interface EstimateAccumulator {
   estimateId: string
   jobId: string
-  createdAt: string | null
+  /** When the estimate was last changed — our "approved at" signal. */
+  approvedAt: string | null
   createdBy: string
   version: number
-  value: number
-  authorisedLines: number
-  lines: EstimateLine[]
+  /** Value summed from lines FLAGGED authorised (often none — see below). */
+  authorisedValue: number
+  /** Value summed from every line, used when no line carries the flag. */
+  allValue: number
+  authorisedLines: EstimateLine[]
+  allLines: EstimateLine[]
 }
 
 export interface RecentApprovals {
@@ -254,53 +265,66 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         acc = {
           estimateId,
           jobId: str(a.jobId) ?? "",
-          createdAt: iso(a.createdAt),
+          approvedAt: iso(a.updatedAt) ?? iso(a.createdAt),
           createdBy: str(a.createdBy) ?? "Unknown",
           version,
-          value: 0,
-          authorisedLines: 0,
-          lines: [],
+          authorisedValue: 0,
+          allValue: 0,
+          authorisedLines: [],
+          allLines: [],
         }
         byEstimate.set(estimateId, acc)
       } else if (version < acc.version) {
         continue
       }
-      const authorised = a.authorised === 1 || a.authorised === "1" || a.authorised === true
-      if (authorised) {
-        acc.authorisedLines += 1
-        acc.value +=
-          num(a.materialTotal) + num(a.materialMarkupTotal) + num(a.labourTotal) + num(a.labourMarkupTotal)
-        acc.lines.push(toLine(a))
+      const lineValue =
+        num(a.materialTotal) + num(a.materialMarkupTotal) + num(a.labourTotal) + num(a.labourMarkupTotal)
+      const line = toLine(a)
+      acc.allValue += lineValue
+      acc.allLines.push(line)
+      if (a.authorised === 1 || a.authorised === "1" || a.authorised === true) {
+        acc.authorisedValue += lineValue
+        acc.authorisedLines.push(line)
       }
     }
 
-    const authorisedEstimates = [...byEstimate.values()].filter((e) => e.authorisedLines > 0)
+    // NOTE: we deliberately do NOT require line-level authorised flags here.
+    // An estimate can be status-Authorised with every line still flagged 0
+    // (seen live on DFM-0015 "Estimate 1": status Authorised, 7 lines, none
+    // flagged, authorised totals 0). The estimate's STATUS is the authority;
+    // the flags only refine which lines/value to report.
+    const candidates = [...byEstimate.values()]
+    const { metas, complete: metaComplete } = await fetchMetas(
+      candidates.map((e) => [e.estimateId, e.version] as const),
+    )
 
-    // Estimate label + type ("Authorised Works" vs "Direct Allocation").
-    const { metas, complete: metaComplete } = await fetchMetas(authorisedEstimates.map((e) => e.estimateId))
-
-    const rows: ApprovalSource[] = authorisedEstimates.map((e) => {
+    const rows: ApprovalSource[] = candidates.map((e) => {
       const job = jobById.get(e.jobId)
       const meta = metas.get(e.estimateId)
-      const inv = findInvoice(invoiceIndex?.get(e.jobId), e.createdAt)
+      const inv = findInvoice(invoiceIndex?.get(e.jobId), e.approvedAt)
+      // Fall back through: official authorised total -> authorised lines ->
+      // every line, so a fully-authorised estimate never shows as $0.
+      const hasFlagged = e.authorisedLines.length > 0
+      const lines = hasFlagged ? e.authorisedLines : e.allLines
+      const value = meta?.valueExGst || (hasFlagged ? e.authorisedValue : e.allValue)
       return {
         jobId: e.jobId,
         jobNumber: job?.jobNumber ?? "—",
         client: job?.client ?? "Unknown",
         division: job?.division ?? "—",
         estimator: e.createdBy,
-        valueExGst: meta?.valueExGst ?? e.value,
+        valueExGst: value,
         // Real estimate status — the facade keeps only authorised ones, so
-        // Pending/Cancelled estimates (which still have authorised-flagged
-        // lines) stay off the board. Unknown until the meta loads.
+        // Pending/Rejected/Cancelled estimates stay off the board. Unknown
+        // until the meta loads.
         status: meta?.estimateStatus ?? "Unknown",
-        createdAt: e.createdAt,
+        createdAt: e.approvedAt,
         statusType: job?.statusType ?? null,
         jobType: job?.jobType ?? null,
         address: job?.address ?? null,
         jobDescription: job?.description ?? null,
         primeUrl: job?.primeUrl ?? null,
-        equipmentHireOnly: e.lines.length > 0 && e.lines.every((l) => isEquipmentHireTrade(l.trade)),
+        equipmentHireOnly: lines.length > 0 && lines.every((l) => isEquipmentHireTrade(l.trade)),
         estimateId: e.estimateId,
         estimateLabel: meta?.label ?? null,
         estimateDescription: meta?.description ?? null,
@@ -310,8 +334,8 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         estimateType: meta?.estimateType ?? null,
         invoiced: inv.primary,
         invoices: inv.all,
-        estHours: aggregateLines(e.jobId, e.lines),
-        lines: e.lines,
+        estHours: aggregateLines(e.jobId, lines),
+        lines,
       }
     })
 

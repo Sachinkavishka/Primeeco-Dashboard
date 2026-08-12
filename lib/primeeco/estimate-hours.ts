@@ -66,7 +66,13 @@ const WINDOW_DAYS = 21
 const PER_PAGE = 500
 const MAX_PAGES = 16 // hard cap (~8k newest lines) even if the window isn't reached
 const BATCH = 4 // PrimeEco allows 5 concurrent; leave one slot for other calls
-const REVALIDATE_S = 4 * 60 * 60 // "every few hours" freshness
+/**
+ * Page cache TTL. Kept short (not hours) because coordinators approve work and
+ * expect it on the board promptly — a long TTL made a just-authorised estimate
+ * invisible until it expired. ~12 pages per refresh at this cadence is well
+ * inside PrimeEco's 60/min and 5,000/day limits.
+ */
+const REVALIDATE_S = 15 * 60
 /**
  * Max time one request may spend on UNCACHED page fetches. Hobby gives the
  * whole function 10s and the scheduling page also loads estimates + roster,
@@ -107,16 +113,28 @@ export const isDayUnit = (u: string) => /^(day|wk|week)/i.test(u)
  */
 export const isEquipmentHireTrade = (trade: string) => /equipment\s*hire/i.test(trade)
 
-function parseCreatedAt(v: unknown): number {
+function parseStamp(v: unknown): number {
   const s = str(v)
   if (!s) return 0
   const t = new Date(s.replace(" ", "T")).getTime()
   return Number.isNaN(t) ? 0 : t
 }
 
+/**
+ * When this snapshot line last changed. Authorising an estimate created weeks
+ * ago updates its lines in place (44 of 1,000 sampled lines had a later
+ * updatedAt than createdAt), so the window must key off updatedAt or those
+ * approvals are invisible.
+ */
+export function lineStamp(a: Record<string, unknown>): number {
+  return Math.max(parseStamp(a.updatedAt), parseStamp(a.createdAt))
+}
+
 async function fetchPage(page: number): Promise<SnapshotEnvelope> {
+  // updatedAt (not createdAt): authorising an older estimate updates its
+  // snapshot in place, so createdAt ordering hides newly approved work.
   return apiFetch<SnapshotEnvelope>("/estimate-items-snapshot", {
-    searchParams: { page, per_page: PER_PAGE, order: "createdAt|DESC" },
+    searchParams: { page, per_page: PER_PAGE, order: "updatedAt|DESC" },
   })
 }
 
@@ -157,7 +175,7 @@ export async function fetchRecentItems(): Promise<{ items: Array<Record<string, 
       const rows = p.data ?? []
       for (const row of rows) {
         const a = row.attributes ?? {}
-        if (parseCreatedAt(a.createdAt) < cutoff) {
+        if (lineStamp(a) < cutoff) {
           reachedWindowEnd = true
           continue
         }
