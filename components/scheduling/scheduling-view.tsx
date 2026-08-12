@@ -385,17 +385,21 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
             <span className="font-semibold text-slate-900">{a.jobNumber}</span>
             {a.jobType && <Chip tone="slate">{a.jobType}</Chip>}
             {a.invoiced && !a.invoiced.progress ? (
-              <Chip tone="emerald">✓ invoiced · works done</Chip>
+              <Chip tone="emerald">✓ invoiced {a.invoiced.invoiceNumber} · works done</Chip>
             ) : a.scheduled ? (
               <Chip tone="emerald">scheduled {a.firstShiftAt ? `· ${fmtDate(a.firstShiftAt)}` : ""}</Chip>
             ) : (
               <Chip tone="rose">needs booking</Chip>
             )}
-            {a.invoiced?.progress && <Chip tone="amber">progress invoiced</Chip>}
+            {a.invoiced?.progress && <Chip tone="amber">progress invoice {a.invoiced.invoiceNumber}</Chip>}
+          </div>
+          {/* Quote identity: PrimeEco has no estimate number, so name + ref. */}
+          <div className="truncate text-xs font-medium text-slate-700">
+            {a.estimateLabel ?? "Untitled quote"}
+            <span className="ml-1.5 font-normal tabular-nums text-slate-400">#{a.estimateRef}</span>
           </div>
           <div className="truncate text-xs text-slate-500">
             {a.client} · {a.division} · {a.estimator}
-            {a.estimateLabel ? ` · ${a.estimateLabel}` : ""}
           </div>
           <HoursChips est={a.estHours} />
         </div>
@@ -412,10 +416,25 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
 
       {open && (
         <div className="border-t border-slate-100 px-3 py-3 text-sm">
-          {a.invoiced && (
-            <div className="mb-1.5 text-xs text-emerald-700">
-              Invoice {a.invoiced.invoiceNumber} · {a.invoiced.invoicedDate ?? "—"} · {a.invoiced.status}
-              {a.invoiced.progress ? " · progress payment" : ""}
+          <div className="mb-1.5 text-xs text-slate-600">
+            <span className="font-semibold">Quote:</span> {a.estimateLabel ?? "Untitled"}{" "}
+            <span className="tabular-nums text-slate-400">#{a.estimateRef}</span>
+            {a.estimateDescription ? ` — ${a.estimateDescription}` : ""}
+          </div>
+
+          {a.invoices.length > 0 && (
+            <div className="mb-2 rounded-lg bg-emerald-50/70 p-2">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-emerald-700">
+                Invoiced ({a.invoices.length})
+              </div>
+              <ul className="mt-0.5 space-y-0.5">
+                {a.invoices.map((inv) => (
+                  <li key={inv.invoiceNumber} className="text-xs text-emerald-800">
+                    {inv.invoiceNumber} · {inv.invoicedDate ?? "—"} · {inv.status}
+                    {inv.progress ? " · progress payment" : " · final"}
+                  </li>
+                ))}
+              </ul>
             </div>
           )}
           {a.address && (

@@ -91,8 +91,11 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
     primeUrl: e.primeUrl,
     estimateId: e.estimateId,
     estimateLabel: e.estimateLabel,
+    estimateDescription: e.estimateDescription,
+    estimateRef: e.estimateRef,
     estimateType: e.estimateType,
     invoiced: e.invoiced,
+    invoices: e.invoices,
     lines: e.lines,
   }
 }

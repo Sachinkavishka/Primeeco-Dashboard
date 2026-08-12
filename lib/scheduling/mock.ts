@@ -37,7 +37,9 @@ export function getMockApprovals(): ApprovalSource[] {
       primeUrl: null,
       equipmentHireOnly: false,
       estimateId: `mock-est-${i}`,
-      estimateLabel: i % 2 === 0 ? "Authorised Works" : `Variation ${i}`,
+      estimateLabel: i % 2 === 0 ? `Quote - ${10 + i} Aug | DFM-0${600 + i}` : `Variation Works ${i}`,
+      estimateDescription: i % 3 === 0 ? "Scope of works as per site inspection" : null,
+      estimateRef: `MOCK${1000 + i}`,
       // Direct Allocations are filtered off the board, so the sample only
       // carries the type coordinators actually plan from.
       estimateType: "Authorised Works",
@@ -47,6 +49,15 @@ export function getMockApprovals(): ApprovalSource[] {
           : i === 6
             ? { invoiceNumber: "INV-2044", invoicedDate: new Date(now).toISOString().slice(0, 10), status: "Sent", paid: false, progress: true }
             : null,
+      invoices:
+        i === 4
+          ? [
+              { invoiceNumber: "INV-2041", invoicedDate: new Date(now - 86_400_000).toISOString().slice(0, 10), status: "Paid", paid: true, progress: false },
+              { invoiceNumber: "INV-2038", invoicedDate: new Date(now - 3 * 86_400_000).toISOString().slice(0, 10), status: "Paid", paid: true, progress: true },
+            ]
+          : i === 6
+            ? [{ invoiceNumber: "INV-2044", invoicedDate: new Date(now).toISOString().slice(0, 10), status: "Sent", paid: false, progress: true }]
+            : [],
       estHours: null,
       lines: [
         {

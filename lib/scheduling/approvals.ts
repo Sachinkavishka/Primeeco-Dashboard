@@ -56,6 +56,7 @@ const iso = (v: unknown): string | null => {
 
 interface EstimateMeta {
   label: string | null
+  description: string | null
   estimateType: string | null
   /**
    * "Authorised" | "Pending" | "Cancelled" | … — the estimate's REAL status.
@@ -82,7 +83,13 @@ async function fetchEstimateMeta(estimateId: string): Promise<EstimateMeta> {
     // rethrow (and stay uncached) so they retry on the next poll.
     const message = err instanceof Error ? err.message : ""
     if (/\(404\)/.test(message)) {
-      return { label: null, estimateType: null, estimateStatus: "Missing", valueExGst: null }
+      return {
+        label: null,
+        description: null,
+        estimateType: null,
+        estimateStatus: "Missing",
+        valueExGst: null,
+      }
     }
     throw err
   }
@@ -90,6 +97,7 @@ async function fetchEstimateMeta(estimateId: string): Promise<EstimateMeta> {
   const value = a.authorisedTotalExcludingTax
   return {
     label: str(a.label) ?? null,
+    description: str(a.description) ?? null,
     estimateType: str(a.estimateType) ?? null,
     estimateStatus: str(a.estimateStatus) ?? null,
     valueExGst: value === undefined || value === null ? null : num(value),
@@ -177,20 +185,23 @@ function toLine(a: Record<string, unknown>): EstimateLine {
 function findInvoice(
   invoices: ArInvoiceFact[] | undefined,
   approvedAt: string | null,
-): InvoicedInfo | null {
-  if (!invoices?.length || !approvedAt) return null
+): { primary: InvoicedInfo | null; all: InvoicedInfo[] } {
+  if (!invoices?.length || !approvedAt) return { primary: null, all: [] }
   const approvedDay = approvedAt.slice(0, 10)
-  const after = invoices.filter((inv) => inv.invoicedDate !== null && inv.invoicedDate >= approvedDay)
-  if (after.length === 0) return null
+  const toInfo = (inv: ArInvoiceFact): InvoicedInfo => ({
+    invoiceNumber: inv.invoiceNumber,
+    invoicedDate: inv.invoicedDate,
+    status: inv.status,
+    paid: inv.paid,
+    progress: inv.progressPct < 1,
+  })
+  const after = invoices
+    .filter((inv) => inv.invoicedDate !== null && inv.invoicedDate >= approvedDay)
+    .sort((a, b) => (b.invoicedDate ?? "").localeCompare(a.invoicedDate ?? ""))
+  if (after.length === 0) return { primary: null, all: [] }
+  // A full/final invoice is stronger evidence the works are done.
   const final = after.find((inv) => inv.progressPct >= 1)
-  const pick = final ?? after[0]
-  return {
-    invoiceNumber: pick.invoiceNumber,
-    invoicedDate: pick.invoicedDate,
-    status: pick.status,
-    paid: pick.paid,
-    progress: pick.progressPct < 1,
-  }
+  return { primary: toInfo(final ?? after[0]), all: after.map(toInfo) }
 }
 
 /**
@@ -271,6 +282,7 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
     const rows: ApprovalSource[] = authorisedEstimates.map((e) => {
       const job = jobById.get(e.jobId)
       const meta = metas.get(e.estimateId)
+      const inv = findInvoice(invoiceIndex?.get(e.jobId), e.createdAt)
       return {
         jobId: e.jobId,
         jobNumber: job?.jobNumber ?? "—",
@@ -291,8 +303,13 @@ export async function getRecentApprovals(): Promise<RecentApprovals> {
         equipmentHireOnly: e.lines.length > 0 && e.lines.every((l) => isEquipmentHireTrade(l.trade)),
         estimateId: e.estimateId,
         estimateLabel: meta?.label ?? null,
+        estimateDescription: meta?.description ?? null,
+        // PrimeEco has no estimate-number field — a short slice of the id is
+        // the only stable, quotable reference.
+        estimateRef: e.estimateId.slice(0, 8).toUpperCase(),
         estimateType: meta?.estimateType ?? null,
-        invoiced: findInvoice(invoiceIndex?.get(e.jobId), e.createdAt),
+        invoiced: inv.primary,
+        invoices: inv.all,
         estHours: aggregateLines(e.jobId, e.lines),
         lines: e.lines,
       }

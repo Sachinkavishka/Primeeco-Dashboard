@@ -30,16 +30,26 @@ export interface ApprovalSource {
   equipmentHireOnly: boolean
   /** PrimeEco estimate id (UUID). */
   estimateId: string
-  /** The estimate's display label in PrimeEco (its "number"/name). */
+  /**
+   * The quote's NAME in PrimeEco (e.g. "Quote - 11 Aug | DFM-0672",
+   * "Variation Works"). PrimeEco has no separate estimate-number field, so
+   * this label plus `estimateRef` are the identifiers.
+   */
   estimateLabel: string | null
+  /** The quote's own description line, when the estimator set one. */
+  estimateDescription: string | null
+  /** Short human-quotable reference derived from the estimate id (8 chars). */
+  estimateRef: string
   /** "Authorised Works" | "Direct Allocation" (the allocations section). */
   estimateType: string | null
   /**
    * Set when the job has an AR invoice dated on/after this approval —
    * invoiced means the works are already completed, so the estimate doesn't
-   * need scheduling.
+   * need scheduling. This is the primary (final over progress) invoice.
    */
   invoiced: InvoicedInfo | null
+  /** Every invoice raised on the job on/after this approval, newest first. */
+  invoices: InvoicedInfo[]
   /**
    * Labour time from THIS estimate's own lines. Null when it has none (or,
    * for mock rows, when the facade should fall back to the mock hours map).
@@ -106,12 +116,18 @@ export interface ApprovedJob {
   primeUrl: string | null
   /** PrimeEco estimate id — unique row key (a job can have several). */
   estimateId: string
-  /** The estimate's display label in PrimeEco (its "number"/name). */
+  /** The quote's NAME in PrimeEco (no separate number field exists). */
   estimateLabel: string | null
+  /** The quote's own description line, when the estimator set one. */
+  estimateDescription: string | null
+  /** Short human-quotable reference derived from the estimate id (8 chars). */
+  estimateRef: string
   /** "Authorised Works" | "Direct Allocation" (the allocations section). */
   estimateType: string | null
   /** Set when the works are already invoiced (= completed). */
   invoiced: InvoicedInfo | null
+  /** Every invoice raised on the job on/after this approval, newest first. */
+  invoices: InvoicedInfo[]
   /** The estimate's line items — full scope detail for the drill-down. */
   lines: EstimateLine[]
 }
