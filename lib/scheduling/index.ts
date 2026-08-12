@@ -1,7 +1,7 @@
 import "server-only"
 import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
-import type { Shift } from "@/lib/connecteam/types"
+import type { CtUser, Shift } from "@/lib/connecteam/types"
 import { getEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { getDashboardData } from "@/lib/primeeco"
 import { getRecentApprovals } from "./approvals"
@@ -162,7 +162,24 @@ function buildTypeBreakdown(shifts: Shift[]): TypeBucket[] {
   return [...byType.values()].sort((a, b) => b.total - a.total)
 }
 
-function buildAvailability(shifts: Shift[], users: { id: string; name: string }[]): TechAvailability[] {
+/**
+ * Availability covers FIELD staff only — technicians, estimators and project
+ * managers — since coordinators and admin aren't rostered to jobs. Staff are
+ * classified from their Connecteam "Title".
+ *
+ * People with no Title set are included only when the roster shows they
+ * actually work shifts; that keeps real technicians visible (in practice every
+ * untitled user is rostered) without pulling office staff back in.
+ */
+function buildAvailability(shifts: Shift[], users: CtUser[]): TechAvailability[] {
+  const rostered = new Set(shifts.flatMap((s) => s.userIds))
+  const fieldStaff = users.filter(
+    (u) => u.staffType === "field" || (u.staffType === "unknown" && rostered.has(u.id)),
+  )
+  return buildAvailabilityFor(shifts, fieldStaff)
+}
+
+function buildAvailabilityFor(shifts: Shift[], users: CtUser[]): TechAvailability[] {
   const today = startOfToday()
   const tomorrow = today + DAY_MS
   const todayPublished = shifts.filter(
@@ -185,6 +202,8 @@ function buildAvailability(shifts: Shift[], users: { id: string; name: string }[
       return {
         userId: u.id,
         name: u.name,
+        title: u.title,
+        titleMissing: u.staffType === "unknown",
         todayShifts: todayCount,
         nextAt: next,
         available: todayCount === 0,
@@ -268,6 +287,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
       draft: upcomingShifts.filter((s) => s.status === "draft").length,
       openShifts: openShifts.length,
       techsOnToday: availability.filter((t) => t.todayShifts > 0).length,
+      officeHidden: roster.users.filter((u) => u.staffType === "office").length,
     },
     approvals: approvals.map(mask),
     needsScheduling: needsScheduling.map(mask),

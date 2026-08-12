@@ -96,10 +96,34 @@ export function normalizeShift(raw: RawShift, schedulerId: string, userName: Map
   }
 }
 
+/**
+ * Field roles that get rostered to jobs. Matched ANYWHERE in the title because
+ * real titles are compound — "General Manager / Estimator", "System
+ * Administrator / Restoration Technician" — and the field part is what counts.
+ */
+const FIELD_TITLE = /technician|estimator|project\s*manager|supervisor/i
+
+/**
+ * Office roles. Checked only AFTER the field test, so "Coordinator / Admin"
+ * is office while "State Manager / admin / Estimator" stays field. Bare
+ * "manager" lands here (QHSE / General / State Manager), which is why
+ * "project manager" is matched explicitly above.
+ */
+const OFFICE_TITLE = /coordinator|admin|account|director|qhse|payroll|reception|manager|marketing|hr\b/i
+
+export function classifyStaff(title: string | null): CtUser["staffType"] {
+  if (!title) return "unknown"
+  if (FIELD_TITLE.test(title)) return "field"
+  if (OFFICE_TITLE.test(title)) return "office"
+  return "unknown"
+}
+
 export function normalizeUser(raw: RawCtUser): CtUser | null {
   const id = toStr(raw.userId) ?? toStr(raw.id)
   if (!id) return null
   const name =
     toStr(raw.fullName) ?? [toStr(raw.firstName), toStr(raw.lastName)].filter(Boolean).join(" ").trim()
-  return { id, name: name || `User ${id}` }
+  const titleField = (raw.customFields ?? []).find((f) => /^title$/i.test(f.name ?? ""))
+  const title = typeof titleField?.value === "string" ? toStr(titleField.value) : null
+  return { id, name: name || `User ${id}`, title, staffType: classifyStaff(title) }
 }

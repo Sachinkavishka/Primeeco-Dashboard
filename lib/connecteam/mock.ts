@@ -9,11 +9,15 @@ import type { CtUser, Shift } from "./types"
  */
 
 const TECHS: CtUser[] = [
-  { id: "u1", name: "Dave Miller" },
-  { id: "u2", name: "Priya Nair" },
-  { id: "u3", name: "Tom Fletcher" },
-  { id: "u4", name: "Sofia Rossi" },
-  { id: "u5", name: "Liam O'Brien" },
+  { id: "u1", name: "Dave Miller", title: "Restoration Technician", staffType: "field" },
+  { id: "u2", name: "Priya Nair", title: "Restoration Technician", staffType: "field" },
+  { id: "u3", name: "Tom Fletcher", title: "Project Manager / Estimator", staffType: "field" },
+  { id: "u4", name: "Sofia Rossi", title: "Casual Restoration Technician", staffType: "field" },
+  // No Title set — included because the roster shows they work shifts.
+  { id: "u5", name: "Liam O'Brien", title: null, staffType: "unknown" },
+  // Office staff: excluded from the availability list.
+  { id: "u6", name: "Dean Adikari", title: "Coordinator", staffType: "office" },
+  { id: "u7", name: "Sachi Ekan", title: "Admin", staffType: "office" },
 ]
 
 const TITLES = [
@@ -39,13 +43,15 @@ function atHour(dayOffset: number, hour: number): number {
 
 export function getMockRoster(): { shifts: Shift[]; users: CtUser[] } {
   const shifts: Shift[] = []
+  // Only field staff get rostered — office staff never appear on shifts.
+  const rosterable = TECHS.filter((t) => t.staffType !== "office")
   let n = 0
   for (let day = 0; day < 7; day++) {
     const perDay = 2 + (day % 3) // 2–4 shifts a day
     for (let i = 0; i < perDay; i++) {
       const title = TITLES[n % TITLES.length]
       const hour = 8 + i * 2
-      const tech = TECHS[n % TECHS.length]
+      const tech = rosterable[n % rosterable.length]
       const open = n % 11 === 5 // occasional unassigned shift
       const draft = n % 4 === 3 // ~1 in 4 still in draft
       const userIds = open ? [] : [tech.id]

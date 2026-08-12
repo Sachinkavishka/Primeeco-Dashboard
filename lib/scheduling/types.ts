@@ -161,10 +161,14 @@ export interface DayColumn {
   shifts: CalendarShift[]
 }
 
-/** A technician's availability snapshot for today. */
+/** A field worker's availability snapshot for today. */
 export interface TechAvailability {
   userId: string
   name: string
+  /** Their Connecteam "Title", e.g. "Restoration Technician". */
+  title: string | null
+  /** True when no Title is set in Connecteam (included on roster evidence). */
+  titleMissing: boolean
   /** Published shifts assigned to them today. */
   todayShifts: number
   /** Next shift start (any day), if any. */
@@ -195,6 +199,8 @@ export interface SchedulingData {
     draft: number
     openShifts: number
     techsOnToday: number
+    /** Office staff (coordinators/admin) excluded from the availability list. */
+    officeHidden: number
   }
 
   /** Recently approved jobs (last 14 days), newest first. */

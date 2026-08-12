@@ -163,7 +163,12 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
           </ul>
         </Panel>
 
-        <Panel title="Who's Available Today" subtitle={`${available.length} free · ${onRoad.length} on the road`}>
+        <Panel
+          title="Who's Available Today"
+          subtitle={`field staff only · ${available.length} free · ${onRoad.length} on the road${
+            c.officeHidden ? ` · ${c.officeHidden} office staff hidden` : ""
+          }`}
+        >
           <div className="grid grid-cols-2 gap-4">
             <div>
               <h3 className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-emerald-600">
@@ -172,9 +177,14 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
               <ul className="space-y-1.5">
                 {available.length === 0 && <li className="text-xs text-slate-400">Nobody free</li>}
                 {available.map((t) => (
-                  <li key={t.userId} className="flex items-center justify-between rounded-lg bg-emerald-50/70 px-2.5 py-1.5">
-                    <span className="truncate text-sm text-slate-700">{t.name}</span>
-                    <span className="text-xs text-slate-400">{t.nextAt ? `next ${fmtDate(t.nextAt)}` : "free"}</span>
+                  <li key={t.userId} className="flex items-center justify-between gap-2 rounded-lg bg-emerald-50/70 px-2.5 py-1.5">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-slate-700">{t.name}</span>
+                      <span className="block truncate text-[11px] text-slate-400" title={t.title ?? undefined}>
+                        {t.title ?? "no title set"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs text-slate-400">{t.nextAt ? `next ${fmtDate(t.nextAt)}` : "free"}</span>
                   </li>
                 ))}
               </ul>
@@ -186,9 +196,14 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
               <ul className="space-y-1.5">
                 {onRoad.length === 0 && <li className="text-xs text-slate-400">Nobody booked</li>}
                 {onRoad.map((t) => (
-                  <li key={t.userId} className="flex items-center justify-between rounded-lg bg-slate-50 px-2.5 py-1.5">
-                    <span className="truncate text-sm text-slate-700">{t.name}</span>
-                    <span className="text-xs font-semibold tabular-nums text-slate-500">{t.todayShifts} today</span>
+                  <li key={t.userId} className="flex items-center justify-between gap-2 rounded-lg bg-slate-50 px-2.5 py-1.5">
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm text-slate-700">{t.name}</span>
+                      <span className="block truncate text-[11px] text-slate-400" title={t.title ?? undefined}>
+                        {t.title ?? "no title set"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-xs font-semibold tabular-nums text-slate-500">{t.todayShifts} today</span>
                   </li>
                 ))}
               </ul>

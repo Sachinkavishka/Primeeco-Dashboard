@@ -53,6 +53,8 @@ export interface RawCtUser {
   lastName?: string
   fullName?: string
   isArchived?: boolean
+  /** Per-user fields; the "Title" entry carries their role. */
+  customFields?: RawShiftCustomField[]
   [key: string]: unknown
 }
 
@@ -85,4 +87,13 @@ export interface Shift {
 export interface CtUser {
   id: string
   name: string
+  /** The "Title" custom field in Connecteam, e.g. "Restoration Technician". */
+  title: string | null
+  /**
+   * Whether this person does field work.
+   *   field   — technician / estimator / project manager (schedulable)
+   *   office  — coordinator / admin / accounts / director (not schedulable)
+   *   unknown — no Title set in Connecteam
+   */
+  staffType: "field" | "office" | "unknown"
 }
