@@ -178,10 +178,12 @@ export interface SchedulingData {
   /** True when management is unlocked; when false, $ values are stripped. */
   showValues: boolean
   /**
-   * False while estimated-hours coverage is still building (time-budgeted
-   * fetch) — the client polls faster until this flips true.
+   * False when this response was assembled inside its time budget without
+   * covering every recent estimate — so it may hold FEWER approvals than a
+   * complete one. The client polls faster while it is false and never lets a
+   * partial result replace a complete one on screen.
    */
-  hoursComplete: boolean
+  dataComplete: boolean
   error?: string
 
   counts: {

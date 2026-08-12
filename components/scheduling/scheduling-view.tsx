@@ -20,8 +20,26 @@ import { Panel } from "@/components/dashboard/panel"
 import { NavTabs } from "@/components/nav-tabs"
 
 const REFRESH_MS = 300_000
-/** Faster poll while the estimated-hours coverage is still building. */
+/** Faster poll while coverage is still building. */
 const WARMUP_REFRESH_MS = 15_000
+
+/**
+ * Choose between the data on screen and a freshly polled result.
+ *
+ * A poll can legitimately come back with FEWER approvals than the page already
+ * has: on serverless each request may hit a cold instance whose estimate caches
+ * are empty, and the server returns whatever it could load inside its time
+ * budget, flagged `dataComplete: false`. Rendering that blindly made rows
+ * appear on refresh and then vanish moments later.
+ *
+ * The rule: a complete result always wins; a partial one may never displace a
+ * complete one; between two partials, keep whichever knows more.
+ */
+function preferredData(current: SchedulingData, incoming: SchedulingData): SchedulingData {
+  if (incoming.dataComplete) return incoming
+  if (current.dataComplete) return current
+  return incoming.approvals.length >= current.approvals.length ? incoming : current
+}
 
 const hm = (iso: string) =>
   new Date(iso).toLocaleTimeString("en-AU", { hour: "2-digit", minute: "2-digit" })
@@ -32,21 +50,22 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
   const [data, setData] = useState(initial)
 
   useEffect(() => {
-    // Poll fast while hours coverage is building, then settle to the normal
-    // cadence once complete.
+    // Poll fast while coverage is building, then settle to the normal cadence.
     const id = setInterval(
       async () => {
         try {
           const res = await fetch("/api/scheduling", { cache: "no-store" })
-          if (res.ok) setData((await res.json()) as SchedulingData)
+          if (!res.ok) return
+          const incoming = (await res.json()) as SchedulingData
+          setData((current) => preferredData(current, incoming))
         } catch {
           /* keep last good */
         }
       },
-      data.hoursComplete ? REFRESH_MS : WARMUP_REFRESH_MS,
+      data.dataComplete ? REFRESH_MS : WARMUP_REFRESH_MS,
     )
     return () => clearInterval(id)
-  }, [data.hoursComplete])
+  }, [data.dataComplete])
 
   const c = data.counts
   const available = data.availability.filter((t) => t.available)
@@ -67,6 +86,15 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
           <NavTabs />
           <SourceBadge label="PrimeEco" live={data.primeecoLive} />
           <SourceBadge label="Connecteam" live={data.connecteamLive} />
+          {!data.dataComplete && (
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full bg-white/20 px-3 py-1 text-xs font-bold"
+              title="Still reading estimates from PrimeEco — the list fills in over the next few refreshes"
+            >
+              <span className="h-2 w-2 animate-pulse rounded-full bg-white" />
+              loading…
+            </span>
+          )}
           <span className="text-sm">{hm(data.generatedAt)}</span>
         </div>
       </header>
@@ -236,9 +264,9 @@ export function SchedulingView({ initial }: { initial: SchedulingData }) {
         <Panel
           title="Estimated Labour — Recently Approved"
           subtitle={
-            data.hoursComplete
+            data.dataComplete
               ? "from authorised estimate line items · hours and days reported separately"
-              : "loading estimate hours… coverage is still building, this fills in shortly"
+              : "still loading estimates… more may appear shortly"
           }
         >
           <EstimatedLabourTable approvals={data.approvals} />
