@@ -1,5 +1,5 @@
 import type { Shift } from "@/lib/connecteam/types"
-import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
+import type { EstimateLine, JobEstimateHours } from "@/lib/primeeco/estimate-labour"
 
 /**
  * The subset of a PrimeEco estimate row the scheduling board actually needs.
@@ -71,20 +71,12 @@ export interface InvoicedInfo {
   progress: boolean
 }
 
-/** One line item of an authorised estimate (scope detail for coordinators). */
-export interface EstimateLine {
-  trade: string
-  /** The scope text, e.g. "Technician Hours - Standard Rate\n<works detail>". */
-  description: string
-  /** Estimator guidance notes, when present. */
-  notes: string | null
-  labourQuantity: number
-  labourUnit: string | null
-  materialQuantity: number
-  materialUnit: string | null
-  /** Labour role when this is a labour-time line (Technician / PM / …). */
-  role: string | null
-}
+/**
+ * One line item of an estimate. Defined in the PrimeEco layer alongside the
+ * labour rules that populate `role`; re-exported here so UI code has a single
+ * import for every scheduling shape.
+ */
+export type { EstimateLine } from "@/lib/primeeco/estimate-labour"
 
 /** An approved job (authorised estimate) with its scheduling state. */
 export interface ApprovedJob {

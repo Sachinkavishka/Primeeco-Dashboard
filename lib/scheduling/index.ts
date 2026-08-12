@@ -2,10 +2,8 @@ import "server-only"
 import { cookies } from "next/headers"
 import { getRoster } from "@/lib/connecteam"
 import type { CtUser, Shift } from "@/lib/connecteam/types"
-import { getEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { getDashboardData } from "@/lib/primeeco"
 import { getRecentApprovals } from "./approvals"
-import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
 import { getMockApprovals, getMockHours } from "./mock"
 import type {
   ApprovalSource,
@@ -69,7 +67,7 @@ function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
   return hay.includes(num)
 }
 
-function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<string, JobEstimateHours>): ApprovedJob {
+function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
   // Connecteam shift.jobId IS the PrimeEco job UUID (systems are synced), so we
   // join exactly on it; the title-token heuristic is a fallback for sample data.
   const matches = shifts.filter(
@@ -91,9 +89,9 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[], hoursByJob: Record<st
     approvedAt: e.createdAt,
     scheduled: matches.length > 0,
     firstShiftAt: firstShift ?? null,
-    // Prefer the estimate's OWN hours (status-filtered); the job-wide map is
-    // the fallback for mock rows.
-    estHours: e.estHours ?? hoursByJob[e.jobId] ?? null,
+    // Labour comes from this estimate's own lines, so a pending or cancelled
+    // sibling estimate on the same job can never inflate it.
+    estHours: e.estHours,
     jobType: e.jobType,
     address: e.address,
     jobDescription: e.jobDescription,
@@ -215,10 +213,9 @@ function buildAvailabilityFor(shifts: Shift[], users: CtUser[]): TechAvailabilit
 export async function getSchedulingData(): Promise<SchedulingData> {
   // The jobs fetch is cached and shared with the approvals path — it only
   // enriches the calendar with job numbers, so its failure is tolerated.
-  const [apr, roster, hoursRes, dashRes] = await Promise.all([
+  const [apr, roster, dashRes] = await Promise.all([
     getRecentApprovals(),
     getRoster(),
-    getEstimateHours(),
     getDashboardData().catch(() => null),
   ])
 
@@ -232,10 +229,12 @@ export async function getSchedulingData(): Promise<SchedulingData> {
   // When PrimeEco isn't configured, populate the SAMPLE board with mock
   // approvals so the join demonstrates (matches Operations' mock behaviour).
   const usingMockApprovals = !apr.live && apr.rows.length === 0
-  const estimateRows: ApprovalSource[] = usingMockApprovals ? getMockApprovals() : apr.rows
-  // Estimated labour hours per job — mock hours accompany mock approvals so the
-  // SAMPLE board demonstrates the feature end-to-end.
-  const hoursByJob = usingMockApprovals ? getMockHours() : hoursRes.byJob
+  // Live rows carry their own labour; the mock rows are given theirs here so
+  // the SAMPLE board demonstrates the feature end to end.
+  const mockHours = usingMockApprovals ? getMockHours() : null
+  const estimateRows: ApprovalSource[] = usingMockApprovals
+    ? getMockApprovals().map((row) => ({ ...row, estHours: mockHours?.[row.jobId] ?? null }))
+    : apr.rows
 
   // Approvals: authorised estimates within the recent window, newest first.
   // Coordinator scope: OPEN jobs only (unknown status is kept, "Closed" is
@@ -249,7 +248,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
       if (!e.createdAt) return false
       return new Date(e.createdAt).getTime() >= windowStart
     })
-    .map((e) => toApprovedJob(e, shifts, hoursByJob))
+    .map((e) => toApprovedJob(e, shifts))
     .sort((a, b) => (b.approvedAt ?? "").localeCompare(a.approvedAt ?? ""))
 
   const recentCutoff = today - RECENT_DAYS * DAY_MS
@@ -273,7 +272,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
     connecteamLive: roster.live,
     generatedAt: new Date().toISOString(),
     showValues,
-    hoursComplete: usingMockApprovals ? true : hoursRes.complete && apr.complete,
+    hoursComplete: usingMockApprovals ? true : apr.complete,
     // Surface BOTH source errors (they were masking each other), except the
     // PrimeEco "not configured" case on the intentional sample board.
     error:

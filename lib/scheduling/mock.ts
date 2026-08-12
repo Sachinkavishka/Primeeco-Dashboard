@@ -1,4 +1,4 @@
-import type { JobEstimateHours } from "@/lib/primeeco/estimate-hours"
+import type { JobEstimateHours } from "@/lib/primeeco/estimate-labour"
 import type { ApprovalSource } from "./types"
 
 /**
@@ -69,6 +69,8 @@ export function getMockApprovals(): ApprovalSource[] {
           materialQuantity: 0,
           materialUnit: null,
           role: "Technician",
+          authorised: true,
+          valueExGst: 440,
         },
         {
           trade: "Chemicals/Consumables",
@@ -79,6 +81,8 @@ export function getMockApprovals(): ApprovalSource[] {
           materialQuantity: 2,
           materialUnit: "litre",
           role: null,
+          authorised: true,
+          valueExGst: 120,
         },
       ],
     })

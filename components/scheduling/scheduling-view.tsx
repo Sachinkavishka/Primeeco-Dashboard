@@ -14,7 +14,7 @@ import {
   Users,
 } from "lucide-react"
 import type { ApprovedJob, CalendarShift, SchedulingData } from "@/lib/scheduling/types"
-import type { HoursRole, JobEstimateHours } from "@/lib/primeeco/estimate-hours"
+import type { HoursRole, JobEstimateHours } from "@/lib/primeeco/estimate-labour"
 import { fmtDate, fmtMoneyCompact, fmtNumber } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
 import { NavTabs } from "@/components/nav-tabs"
