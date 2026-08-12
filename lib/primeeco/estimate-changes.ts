@@ -47,19 +47,34 @@ export interface EstimateChanges {
   complete: boolean
 }
 
-/** How far back to look for approvals. */
-const WINDOW_DAYS = 21
+/**
+ * How far back to look for approvals.
+ *
+ * Kept equal to the board's display window (APPROVAL_WINDOW_DAYS in
+ * lib/scheduling/index.ts): a wider net here costs real time — measured live,
+ * 21 days discovered 163 estimates against 92 for 14 — and every extra
+ * estimate is a snapshot to load for rows that are then filtered out anyway.
+ */
+const WINDOW_DAYS = 14
 const PER_PAGE = 500
 /** Safety cap so a runaway dataset can't exhaust the rate limit. */
 const MAX_PAGES = 16
 /** PrimeEco allows 5 concurrent requests; leave one spare for other fetches. */
 const BATCH = 4
 /**
- * Page cache TTL. Deliberately short: coordinators approve work and expect to
- * see it, and a multi-hour TTL made fresh approvals invisible. Roughly a dozen
- * pages at this cadence sits well inside the 60/min and 5,000/day limits.
+ * Page cache TTLs, tiered by how volatile the page is.
+ *
+ * The feed is ordered newest-first, so a new approval always lands on page 1
+ * while deeper pages hold history that only shifts as volume pushes it down.
+ * Measured live, an uncached page can take upwards of 10s, so refetching all
+ * of them on a short timer was the main reason cold requests ran out of budget
+ * and returned partial lists.
+ *
+ * Page 1 therefore stays fresh (new approvals appear quickly) and the rest are
+ * held long enough that a warm request rarely pays for them.
  */
-const PAGE_TTL_S = 15 * 60
+const FIRST_PAGE_TTL_S = 5 * 60
+const DEEPER_PAGE_TTL_S = 6 * 60 * 60
 /**
  * Time one request may spend on UNCACHED pages. Vercel's Hobby plan allows the
  * whole function 10s and the page loads other data too, so coverage is built up
@@ -98,11 +113,20 @@ function fetchPage(page: number): Promise<FeedEnvelope> {
   })
 }
 
-/** Each page is cached independently, keyed by its page number. */
-const getCachedPage = unstable_cache(fetchPage, ["primeeco-estimate-changes-page-v1"], {
-  revalidate: PAGE_TTL_S,
+/** Page 1 — refreshed often so newly approved work shows up quickly. */
+const getCachedFirstPage = unstable_cache(fetchPage, ["primeeco-estimate-changes-head-v2"], {
+  revalidate: FIRST_PAGE_TTL_S,
   tags: ["primeeco-estimate-changes"],
 })
+
+/** Pages 2+ — history, held long so warm requests don't refetch it. */
+const getCachedDeeperPage = unstable_cache(fetchPage, ["primeeco-estimate-changes-tail-v2"], {
+  revalidate: DEEPER_PAGE_TTL_S,
+  tags: ["primeeco-estimate-changes"],
+})
+
+const getCachedPage = (page: number) =>
+  page === 1 ? getCachedFirstPage(page) : getCachedDeeperPage(page)
 
 /**
  * Page the feed newest-first and collapse it to one entry per estimate.

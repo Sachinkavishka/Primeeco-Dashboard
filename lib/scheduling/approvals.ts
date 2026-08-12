@@ -34,10 +34,17 @@ import type { ApprovalSource, InvoicedInfo } from "./types"
  * Tuning                                                              *
  * ------------------------------------------------------------------ */
 
-/** Snapshots fetched concurrently; PrimeEco allows 5 in flight. */
-const SNAPSHOT_BATCH = 4
-/** Time one request may spend loading UNCACHED snapshots. */
-const SNAPSHOT_BUDGET_MS = 2_500
+/** Snapshots fetched concurrently; PrimeEco allows 5 requests in flight. */
+const SNAPSHOT_BATCH = 5
+/**
+ * Time one request may spend loading UNCACHED snapshots.
+ *
+ * Sized against the platform's function timeout rather than the API: discovery
+ * may already have spent several seconds, and being killed mid-request returns
+ * nothing at all, which is worse than returning a partial list. Cached
+ * snapshots are effectively free, so this ceiling only binds while warming up.
+ */
+const SNAPSHOT_BUDGET_MS = 4_000
 
 /* ------------------------------------------------------------------ *
  * Result                                                              *
