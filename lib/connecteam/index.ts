@@ -25,8 +25,18 @@ export interface Roster {
 }
 
 const REVALIDATE_S = 300
-const WINDOW_BACK_MS = 1 * 24 * 60 * 60 * 1000
-const WINDOW_FWD_MS = 21 * 24 * 60 * 60 * 1000
+
+/**
+ * How far BACK the roster reaches.
+ *
+ * The calendar itself only needs today onwards, but the board also reports how
+ * many hours have already been booked against each approval — and an approval
+ * can be up to APPROVAL_WINDOW_DAYS old with shifts worked since. The window
+ * therefore has to cover the whole approval window plus headroom, or work
+ * already done would be invisible and every job would look unscheduled.
+ */
+const WINDOW_BACK_MS = 30 * 24 * 60 * 60 * 1000
+const WINDOW_FWD_MS = 30 * 24 * 60 * 60 * 1000
 
 async function fetchLive(): Promise<Roster> {
   const users = await fetchUsers()

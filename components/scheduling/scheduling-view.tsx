@@ -13,7 +13,7 @@ import {
   UserCheck,
   Users,
 } from "lucide-react"
-import type { ApprovedJob, CalendarShift, SchedulingData } from "@/lib/scheduling/types"
+import type { ApprovedJob, BookedHours, CalendarShift, SchedulingData } from "@/lib/scheduling/types"
 import type { HoursRole, JobEstimateHours } from "@/lib/primeeco/estimate-labour"
 import { fmtDate, fmtMoneyCompact, fmtNumber } from "@/lib/format"
 import { Panel } from "@/components/dashboard/panel"
@@ -295,6 +295,46 @@ const ROLE_SHORT: Record<HoursRole, string> = {
 
 const fmtH = (n: number) => (Number.isInteger(n) ? String(n) : n.toFixed(1))
 
+/**
+ * Estimated vs booked technician hours for one approval.
+ *
+ * Reads as a sentence a coordinator can act on: how many hours the estimate
+ * approved, how many are already rostered in Connecteam since that approval,
+ * and how many still need a crew.
+ */
+function BurnDown({ booked }: { booked: BookedHours }) {
+  // Nothing to reconcile when the estimate quotes no technician time.
+  if (booked.estimated <= 0 && booked.confirmed <= 0 && booked.draft <= 0) return null
+
+  const remaining = booked.remaining
+  const tone =
+    booked.overBooked
+      ? "bg-rose-50 text-rose-700"
+      : remaining === 0
+        ? "bg-emerald-50 text-emerald-700"
+        : "bg-amber-50 text-amber-700"
+
+  return (
+    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px]">
+      <span className={`inline-flex rounded-md px-1.5 py-0.5 font-semibold ${tone}`}>
+        {fmtH(booked.confirmed)}h booked / {fmtH(booked.estimated)}h est
+        {remaining !== null && remaining > 0 && ` · ${fmtH(remaining)}h to schedule`}
+        {booked.overBooked && " · over estimate"}
+      </span>
+      {booked.draft > 0 && (
+        <span className="inline-flex rounded-md bg-amber-100 px-1.5 py-0.5 font-semibold text-amber-700">
+          +{fmtH(booked.draft)}h draft
+        </span>
+      )}
+      {booked.openShiftCount > 0 && (
+        <span className="inline-flex rounded-md bg-rose-100 px-1.5 py-0.5 font-semibold text-rose-700">
+          {booked.openShiftCount} unassigned
+        </span>
+      )}
+    </div>
+  )
+}
+
 /** Compact per-role hour chips shown on an approved-job row. */
 function HoursChips({ est }: { est: JobEstimateHours | null }) {
   if (!est) return null
@@ -447,6 +487,7 @@ function ApprovalRow({ a, showValues, tone }: { a: ApprovedJob; showValues: bool
             {a.client} · {a.division} · {a.estimator}
           </div>
           <HoursChips est={a.estHours} />
+          <BurnDown booked={a.booked} />
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <div className="text-right">

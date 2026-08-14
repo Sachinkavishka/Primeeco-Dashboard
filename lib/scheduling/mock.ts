@@ -21,7 +21,9 @@ export function getMockApprovals(): ApprovalSource[] {
     // Half of these line up with a mock shift (scheduled); half don't (need booking).
     const jobNumber = i % 2 === 0 ? String(1001 + i) : `J-${9000 + i}`
     rows.push({
-      jobId: `mock-job-${i}`,
+      // Aligned with getMockJobs() and the mock roster's ctJobId so the sample
+      // board exercises the same job-id join the live data uses.
+      jobId: String(100_000 + i),
       jobNumber,
       estimator: ESTIMATORS[i % ESTIMATORS.length],
       status: "Authorised",
@@ -99,8 +101,8 @@ export function getMockHours(): Record<string, JobEstimateHours> {
     const sup = i % 4 === 0 ? 4 : 0
     const lab = i % 2 === 0 ? 6 : 0
     const days = i % 3 === 2 ? 2 + (i % 5) : 0
-    out[`mock-job-${i}`] = {
-      jobId: `mock-job-${i}`,
+    out[String(100_000 + i)] = {
+      jobId: String(100_000 + i),
       byRole: {
         Technician: { hours: tech, days: 0 },
         ...(pm ? { "Project Manager": { hours: pm, days: 0 } } : {}),

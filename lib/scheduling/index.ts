@@ -4,6 +4,7 @@ import { getRoster } from "@/lib/connecteam"
 import type { CtUser, Shift } from "@/lib/connecteam/types"
 import { getDashboardData } from "@/lib/primeeco"
 import { getRecentApprovals } from "./approvals"
+import { indexShiftsByJob, reconcileHours } from "./booked-hours"
 import { getMockApprovals, getMockHours } from "./mock"
 import type {
   ApprovalSource,
@@ -67,18 +68,25 @@ function shiftMatchesJob(shift: Shift, jobNumber: string): boolean {
   return hay.includes(num)
 }
 
-function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
-  // Connecteam shift.jobId IS the PrimeEco job UUID (systems are synced), so we
-  // join exactly on it; the title-token heuristic is a fallback for sample data.
-  const matches = shifts.filter(
-    (s) =>
-      (s.ctJobId && e.jobId && s.ctJobId === e.jobId) ||
-      (e.jobNumber && e.jobNumber !== "—" && shiftMatchesJob(s, e.jobNumber)),
+function toApprovedJob(e: ApprovalSource, shiftsByJob: Map<string, Shift[]>, allShifts: Shift[]): ApprovedJob {
+  // Connecteam shift.jobId IS the PrimeEco job UUID (the systems are synced),
+  // so this is an exact lookup. The title-token scan only ever runs for the
+  // sample roster, whose ids are synthetic.
+  const matches =
+    shiftsByJob.get(e.jobId) ??
+    (e.jobNumber && e.jobNumber !== "—"
+      ? allShifts.filter((s) => shiftMatchesJob(s, e.jobNumber))
+      : [])
+
+  // Only shifts on or after the approval count as work booked FOR it.
+  const since = matches.filter(
+    (s) => !e.createdAt || new Date(s.start).getTime() >= new Date(e.createdAt).getTime(),
   )
-  const firstShift = matches
+  const firstShift = since
     .map((s) => s.start)
     .sort()
     .at(0)
+
   return {
     jobId: e.jobId,
     jobNumber: e.jobNumber,
@@ -87,8 +95,9 @@ function toApprovedJob(e: ApprovalSource, shifts: Shift[]): ApprovedJob {
     estimator: e.estimator,
     valueExGst: e.valueExGst,
     approvedAt: e.createdAt,
-    scheduled: matches.length > 0,
+    scheduled: since.length > 0,
     firstShiftAt: firstShift ?? null,
+    booked: reconcileHours(matches, e.createdAt, e.estHours),
     // Labour comes from this estimate's own lines, so a pending or cancelled
     // sibling estimate on the same job can never inflate it.
     estHours: e.estHours,
@@ -223,6 +232,8 @@ export async function getSchedulingData(): Promise<SchedulingData> {
     (dashRes?.jobs ?? []).map((j) => [j.id, { jobNumber: j.jobNumber, client: j.client }]),
   )
   const shifts = toCalendarShifts(roster.shifts, jobFacts)
+  // Indexed once so each approval is reconciled by lookup, not a full scan.
+  const shiftsByJob = indexShiftsByJob(shifts)
   const today = startOfToday()
   const windowStart = today - APPROVAL_WINDOW_DAYS * DAY_MS
 
@@ -248,7 +259,7 @@ export async function getSchedulingData(): Promise<SchedulingData> {
       if (!e.createdAt) return false
       return new Date(e.createdAt).getTime() >= windowStart
     })
-    .map((e) => toApprovedJob(e, shifts))
+    .map((e) => toApprovedJob(e, shiftsByJob, shifts))
     .sort((a, b) => (b.approvedAt ?? "").localeCompare(a.approvedAt ?? ""))
 
   const recentCutoff = today - RECENT_DAYS * DAY_MS

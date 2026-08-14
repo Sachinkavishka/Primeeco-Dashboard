@@ -1,5 +1,6 @@
 import type { Shift } from "@/lib/connecteam/types"
 import type { EstimateLine, JobEstimateHours } from "@/lib/primeeco/estimate-labour"
+import type { BookedHours } from "./booked-hours"
 
 /**
  * The subset of a PrimeEco estimate row the scheduling board actually needs.
@@ -77,6 +78,7 @@ export interface InvoicedInfo {
  * import for every scheduling shape.
  */
 export type { EstimateLine } from "@/lib/primeeco/estimate-labour"
+export type { BookedHours } from "./booked-hours"
 
 /** An approved job (authorised estimate) with its scheduling state. */
 export interface ApprovedJob {
@@ -90,6 +92,11 @@ export interface ApprovedJob {
   approvedAt: string | null
   /** True when we found a matching Connecteam shift for this job. */
   scheduled: boolean
+  /**
+   * Estimated vs booked technician hours since this approval — how much of the
+   * approved work is already on the roster and how much still needs a crew.
+   */
+  booked: BookedHours
   /** Start day of the first matching shift, if scheduled. */
   firstShiftAt: string | null
   /**
